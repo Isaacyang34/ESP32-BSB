@@ -132,7 +132,8 @@
     <div class="list-container" id="scheduleList" style="flex: 1;"></div>
   </div>
 
-  <div id="tab-scoreboard" class="page">
+  <div id="tab-scoreboard" class="page" style="position: relative;">
+    <button id="btn-voice" style="position: absolute; top: 0px; right: 5px; font-size: 1.2rem; background: #444; border: 1px solid #666; border-radius: 5px; padding: 5px 10px; cursor: pointer; color: white; z-index: 10;" onclick="toggleVoiceRecognition()">🎤 語音</button>
     <div style="text-align: center; font-family: sans-serif; margin-bottom: 5px; color: #aaa;" id="currentMatchLabel">尚未載入賽程 (可直接手動計分)</div>
     <div class="scoreboard-layout">
       <div id="panel-A" class="score-column score-box team-a serving" onclick="setInitialServe('A')">
@@ -511,6 +512,69 @@
       document.getElementById('btn-A-plus').disabled = false; document.getElementById('btn-B-plus').disabled = false;
       document.getElementById('currentMatchLabel').innerText = '尚未載入賽程 (可直接手動計分)';
       updatePlayerUI();
+    }
+
+    // ==========================================
+    // 🎤 語音辨識 (Web Speech API) 模組
+    // ==========================================
+    let recognition;
+    let isRecognizing = false;
+
+    function initSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true; // 持續監聽
+        recognition.interimResults = false;
+        recognition.lang = 'zh-TW';
+
+        recognition.onstart = function() {
+          isRecognizing = true;
+          document.getElementById('btn-voice').style.background = '#ff3333';
+          document.getElementById('btn-voice').innerText = '🔴 聽取中';
+          console.log('語音辨識已啟動');
+        };
+
+        recognition.onresult = function(event) {
+          const transcript = event.results[event.results.length - 1][0].transcript.trim();
+          console.log('聽到指令: ' + transcript);
+          
+          // 關鍵字判斷邏輯
+          if (transcript.includes('A隊加分') || transcript.includes('紅隊加分') || transcript.includes('左邊加分')) {
+            changeScore('A', 1);
+          } else if (transcript.includes('B隊加分') || transcript.includes('綠隊加分') || transcript.includes('右邊加分')) {
+            changeScore('B', 1);
+          } else if (transcript.includes('A隊減分') || transcript.includes('左邊減分') || transcript.includes('紅隊減分')) {
+            changeScore('A', -1);
+          } else if (transcript.includes('B隊減分') || transcript.includes('右邊減分') || transcript.includes('綠隊減分')) {
+            changeScore('B', -1);
+          } else if (transcript.includes('分數歸零') || transcript.includes('重新開始')) {
+            resetScoreData();
+            sendCmd('RESET');
+          }
+        };
+
+        recognition.onerror = function(event) {
+          console.error('語音辨識錯誤:', event.error);
+        };
+
+        recognition.onend = function() {
+          isRecognizing = false;
+          document.getElementById('btn-voice').style.background = '#444';
+          document.getElementById('btn-voice').innerText = '🎤 語音';
+        };
+      } else {
+        alert('您的瀏覽器不支援語音辨識功能！建議使用 Android 的 Chrome 瀏覽器或 iOS 的 Safari。');
+      }
+    }
+
+    function toggleVoiceRecognition() {
+      if (!recognition) initSpeech();
+      if (isRecognizing) {
+        recognition.stop();
+      } else {
+        try { recognition.start(); } catch(e) { console.error(e); }
+      }
     }
   </script>
 </body>
