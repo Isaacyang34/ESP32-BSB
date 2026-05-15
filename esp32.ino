@@ -2,6 +2,30 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <queue>
+
+// ==========================================
+// 語音模組設定 (CX1000AC)
+// ==========================================
+#define VOICE_RX_PIN 40 // ESP32 RX (接模組 TX)
+#define VOICE_TX_PIN 39 // ESP32 TX (接模組 RX)
+HardwareSerial VoiceSerial(1);
+
+std::queue<int> voiceQueue;
+unsigned long lastVoicePlayTime = 0;
+const int VOICE_DELAY_MS = 1200; // 每個語音播放的間隔時間(毫秒)，可依據實際語音長度調整
+
+void playVoiceTrack(int trackNo) {
+  // CX1000AC / WT2003S 播放指令 (0x7E 0x09 ...)
+  uint8_t cmd[9] = {0x7E, 0x09, 0xFF, 0xFF, 0x07, (uint8_t)((trackNo >> 8) & 0xFF), (uint8_t)(trackNo & 0xFF), 0x00, 0xEF};
+  int sum = 0;
+  for (int i = 0; i < 7; i++) {
+    sum += cmd[i];
+  }
+  cmd[7] = (uint8_t)(sum & 0xFF);
+  VoiceSerial.write(cmd, 9);
+  Serial.printf("播放語音檔索引: %d\n", trackNo);
+}
 
 // ==========================================
 // 1. WiFi 設定 (開啟 AP 基地台模式)
@@ -75,6 +99,10 @@ void drawScoreboard() {
 void setup() {
   Serial.begin(115200);
 
+  // 初始化語音模組序列埠
+  VoiceSerial.begin(9600, SERIAL_8N1, VOICE_RX_PIN, VOICE_TX_PIN);
+  Serial.println("Voice Serial Init Done");
+
   // 初始化 LED 面板
   HUB75_I2S_CFG mxconfig(PANEL_RES_X, PANEL_RES_Y, PANEL_CHAIN);
   // mxconfig.gpio.e = 18; // 如果你的面板是 64x64 需要指定 E pin
@@ -128,6 +156,12 @@ void setup() {
     // 呼叫繪圖函式更新 LED
     drawScoreboard();
 
+    // 將報分加入語音佇列 (A分數 -> "比" -> B分數)
+    // 依據您的設定：0分 對應 00000.mp3，1分 對應 00001.mp3... (檔名 = 分數)
+    voiceQueue.push(scoreA); 
+    voiceQueue.push(31);         // "比" (00031.mp3)
+    voiceQueue.push(scoreB);
+
     // 回傳成功給手機端
     request->send(200, "text/plain", "OK");
   });
@@ -138,6 +172,15 @@ void setup() {
 }
 
 void loop() {
-  // ESPAsyncWebServer 在背景運行，不需要在 loop 中寫 client 處理
+  // 處理語音非阻塞播放佇列
+  if (!voiceQueue.empty()) {
+    if (millis() - lastVoicePlayTime > VOICE_DELAY_MS) {
+      int track = voiceQueue.front();
+      voiceQueue.pop();
+      playVoiceTrack(track);
+      lastVoicePlayTime = millis();
+    }
+  }
+  
   // 可以在這裡放些跑馬燈動畫，或者保持空白
 }
