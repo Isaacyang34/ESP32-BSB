@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>LED Matrix Studio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600&display=swap');
+
+:root {
+  --bg:      #08090c;
+  --bg2:     #0e1017;
+  --bg3:     #161820;
+  --bg4:     #1e2130;
+  --border:  rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.12);
+  --text:    #d8dce8;
+  --text2:   #606580;
+  --text3:   #404560;
+  --accent:  #00e5ff;
+  --accent2: #ff6b35;
+  --green:   #00e676;
+  --red:     #ff3d57;
+  --purple:  #b57aff;
+  --yellow:  #ffd740;
+  --mono:    'Share Tech Mono', monospace;
+  --ui:      'Rajdhani', sans-serif;
+  --px:      9px;   /* pixel preview cell size */
+  --gap:     1px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--ui);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scanline overlay ────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ── Layout ──────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  grid-template-columns: 1fr;
+  min-height: 100vh;
+}
+
+/* ── Header ──────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.5; transform:scale(.8); }
+}
+.header-status {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 11px; color: var(--text2);
+}
+.status-chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg3);
+}
+.chip-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  transition: background .3s, box-shadow .3s;
+}
+.chip-dot.on {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+/* ── Main content ────────────────────────────────── */
+main {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Panel ───────────────────────────────────────── */
+.panel {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+}
+.panel-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.panel-body { padding: 12px; }
+
+/* ── LED Matrix Preview ──────────────────────────── */
+.matrix-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+}
+.matrix-outer {
+  background: #000;
+  border: 2px solid #1a1f2e;
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow:
+    0 0 0 1px #0a0c14,
+    0 8px 32px rgba(0,0,0,.8),
+    inset 0 0 20px rgba(0,0,0,.5);
+  position: relative;
+}
+.matrix-outer::before {
+  content: '';
+  position: absolute; inset: 6px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px, transparent calc(var(--px) - 1px),
+    rgba(255,255,255,.02) calc(var(--px) - 1px), rgba(255,255,255,.02) var(--px)
+  ),
+  repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent calc(var(--px) - 1px),
+    rgba(255,255,255,.02) calc(var(--px) - 1px), rgba(255,255,255,.02) var(--px)
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+#matrixCanvas {
+  display: block;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  /* 64 cols × px + (64-1) gaps */
+  width:  calc(64 * var(--px) + 63 * var(--gap));
+  height: calc(32 * var(--px) + 31 * var(--gap));
+}
+.matrix-info {
+  display: flex; gap: 12px;
+  font-family: var(--mono); font-size: 10px; color: var(--text3);
+}
+.matrix-toolbar {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+}
+.tool-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .15s;
+}
+.tool-btn:hover  { border-color: var(--accent); color: var(--accent); }
+.tool-btn.active { background: rgba(0,229,255,.12); border-color: var(--accent); color: var(--accent); }
+.tool-btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Tabs ────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 10px 16px;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.tab:hover  { color: var(--text2); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; padding: 12px; }
+.tab-content.active { display: block; }
+
+/* ── Mode buttons ────────────────────────────────── */
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.mode-btn {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  padding: 10px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.mode-btn .icon { font-size: 18px; }
+.mode-btn:hover  { border-color: var(--accent); color: var(--text); }
+.mode-btn.active {
+  background: rgba(0,229,255,.1);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 12px rgba(0,229,255,.15);
+}
+
+/* ── Sliders ─────────────────────────────────────── */
+.ctrl-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.ctrl-label {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text2); min-width: 52px;
+}
+input[type=range] {
+  flex: 1; -webkit-appearance: none;
+  height: 3px; border-radius: 2px;
+  background: var(--bg4); outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(0,229,255,.5);
+}
+.ctrl-val {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent); min-width: 36px; text-align: right;
+}
+
+/* ── Input / Button ──────────────────────────────── */
+.input-row { display: flex; gap: 6px; margin-bottom: 10px; }
+input[type=text], input[type=password] {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 9px 10px;
+  outline: none;
+  transition: border-color .15s;
+}
+input[type=text]:focus,
+input[type=password]:focus { border-color: var(--accent); }
+input[type=text]::placeholder { color: var(--text3); }
+
+.btn {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: 1px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: none; cursor: pointer;
+  transition: opacity .15s, box-shadow .15s;
+  white-space: nowrap;
+}
+.btn:hover { opacity: .85; }
+.btn:active { opacity: .7; }
+.btn-accent {
+  background: var(--accent); color: #000; font-weight: 600;
+  box-shadow: 0 0 12px rgba(0,229,255,.3);
+}
+.btn-danger  { background: var(--red);    color: #fff; }
+.btn-ghost   {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-full { width: 100%; text-align: center; }
+
+/* ── Upload zone ─────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed var(--border2);
+  border-radius: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--bg3);
+  margin-bottom: 10px;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(0,229,255,.04); }
+.upload-icon { font-size: 28px; margin-bottom: 6px; }
+.upload-text {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text2); line-height: 1.6;
+}
+.upload-text strong { color: var(--accent); }
+input[type=file] { display: none; }
+
+/* ── GIF list ────────────────────────────────────── */
+.gif-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.gif-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.gif-name { font-family: var(--mono); font-size: 11px; color: var(--text); }
+.gif-size { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+.gif-actions { display: flex; gap: 4px; }
+
+/* ── Color picker row ────────────────────────────── */
+.color-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.color-label { font-family: var(--mono); font-size: 10px; color: var(--text2); }
+.color-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+.swatch {
+  width: 20px; height: 20px; border-radius: 3px;
+  cursor: pointer; border: 2px solid transparent;
+  transition: border-color .1s, transform .1s;
+}
+.swatch:hover, .swatch.selected { border-color: #fff; transform: scale(1.2); }
+input[type=color] {
+  width: 24px; height: 24px;
+  border: none; border-radius: 3px;
+  cursor: pointer; background: none;
+  padding: 0;
+}
+
+/* ── Info rows ───────────────────────────────────── */
+.info-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.info-cell {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.info-key { font-family: var(--mono); font-size: 9px; color: var(--text3); margin-bottom: 3px; }
+.info-val { font-family: var(--mono); font-size: 12px; color: var(--text); }
+.info-val.ok  { color: var(--green); }
+.info-val.err { color: var(--red); }
+.info-val.warn{ color: var(--yellow); }
+
+/* ── Progress bar ────────────────────────────────── */
+.progress-wrap {
+  background: var(--bg3); border-radius: 4px;
+  height: 6px; overflow: hidden; margin: 8px 0;
+}
+.progress-bar {
+  height: 100%; background: var(--accent);
+  border-radius: 4px; width: 0%;
+  transition: width .3s;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── Toast ───────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 20px; left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: var(--mono); font-size: 11px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  transition: transform .25s ease;
+  pointer-events: none; z-index: 9999;
+  white-space: nowrap;
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── Pixel cursor coords ─────────────────────────── */
+.coord-badge {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text3);
+}
+
+/* ── Streaming indicator ─────────────────────────── */
+.stream-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255,61,87,.15);
+  border: 1px solid rgba(255,61,87,.3);
+  font-family: var(--mono); font-size: 10px; color: var(--red);
+}
+.stream-badge.active {
+  background: rgba(255,107,53,.15);
+  border-color: rgba(255,107,53,.3);
+  color: var(--accent2);
+}
+.stream-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: currentColor;
+}
+.stream-badge.active .stream-dot {
+  animation: blink .6s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── Header ─────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    LED MATRIX STUDIO
+  </div>
+  <div class="header-status">
+    <div class="status-chip">
+      <div class="chip-dot" id="wsDot"></div>
+      <span id="wsLabel">OFFLINE</span>
+    </div>
+    <div class="stream-badge" id="streamBadge">
+      <div class="stream-dot"></div>
+      <span id="streamLabel">IDLE</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────── -->
+<main>
+
+  <!-- LED Matrix Preview -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">// MATRIX PREVIEW — 64×32</span>
+      <span class="coord-badge" id="coordBadge">X:-- Y:--</span>
+    </div>
+    <div class="matrix-wrap">
+      <div class="matrix-outer">
+        <canvas id="matrixCanvas"></canvas>
+      </div>
+
+      <!-- 工具列 -->
+      <div class="matrix-toolbar">
+        <button class="tool-btn active" id="toolDraw"   onclick="setTool('draw')">✏️ 繪製</button>
+        <button class="tool-btn"        id="toolErase"  onclick="setTool('erase')">🧹 橡皮</button>
+        <button class="tool-btn"        id="toolFill"   onclick="setTool('fill')">🪣 填充</button>
+        <button class="tool-btn danger" id="toolClear"  onclick="clearCanvas()">🗑 清除</button>
+        <button class="tool-btn"                        onclick="sendFrameToPanel()">📡 推送</button>
+        <button class="tool-btn"                        onclick="startStream()">▶ 投屏</button>
+        <button class="tool-btn danger"                 onclick="stopStream()">■ 停止</button>
+      </div>
+
+      <!-- 顏色 -->
+      <div class="color-row">
+        <span class="color-label">COLOR</span>
+        <div class="color-swatches" id="swatches"></div>
+        <input type="color" id="colorPicker" value="#00e5ff"
+               oninput="setDrawColor(this.value)">
+      </div>
+    </div>
+  </div>
+
+  <!-- 功能 Tabs -->
+  <div class="panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('clock')">🕐 時鐘</div>
+      <div class="tab"        onclick="switchTab('text')">📜 跑馬燈</div>
+      <div class="tab"        onclick="switchTab('gif')">🎞 GIF</div>
+      <div class="tab"        onclick="switchTab('image')">🖼 圖案</div>
+      <div class="tab"        onclick="switchTab('settings')">⚙ 設定</div>
+    </div>
+
+    <!-- 時鐘 Tab -->
+    <div class="tab-content active" id="tab-clock">
+      <div style="text-align:center;padding:10px 0 16px;">
+        <div id="clockTime" style="font-family:var(--mono);font-size:38px;color:var(--accent);letter-spacing:3px;">--:--:--</div>
+        <div id="clockDate" style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-top:4px;">--</div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode-btn active" data-mode="0" onclick="setMode(0)">
+          <span class="icon">🕐</span>時鐘
+        </div>
+        <div class="mode-btn" data-mode="1" onclick="setMode(1)">
+          <span class="icon">📜</span>跑馬燈
+        </div>
+        <div class="mode-btn" data-mode="2" onclick="setMode(2)">
+          <span class="icon">🎞</span>GIF
+        </div>
+        <div class="mode-btn" data-mode="3" onclick="setMode(3)">
+          <span class="icon">🖼</span>圖案
+        </div>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">亮度</span>
+        <input type="range" id="brightness" min="10" max="255" value="50"
+          oninput="document.getElementById('bVal').textContent=this.value"
+          onchange="sendCmd({cmd:'setBrightness',value:+this.value})">
+        <span class="ctrl-val" id="bVal">50</span>
+      </div>
+    </div>
+
+    <!-- 跑馬燈 Tab -->
+    <div class="tab-content" id="tab-text">
+      <div class="input-row">
+        <input type="text" id="scrollText" placeholder="輸入跑馬燈文字...">
+        <button class="btn btn-accent" onclick="sendScrollText()">送出</button>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">速度</span>
+        <input type="range" id="speed" min="10" max="200" value="40"
+          oninput="document.getElementById('sVal').textContent=this.value+'ms'"
+          onchange="sendCmd({cmd:'setSpeed',value:+this.value})">
+        <span class="ctrl-val" id="sVal">40ms</span>
+      </div>
+      <div class="color-row">
+        <span class="color-label">文字色</span>
+        <input type="color" id="textColor" value="#ff6b35"
+          onchange="sendCmd({cmd:'setTextColor',value:this.value})">
+      </div>
+    </div>
+
+    <!-- GIF Tab -->
+    <div class="tab-content" id="tab-gif">
+      <label class="upload-zone" id="gifZone">
+        <div class="upload-icon">🎞</div>
+        <div class="upload-text">
+          <strong>點擊或拖放 GIF 檔案</strong><br>
+          支援動態 GIF，建議解析度 64×32 或更小
+        </div>
+        <input type="file" id="gifFile" accept=".gif" multiple onchange="handleGifUpload(this.files)">
+      </label>
+      <div class="progress-wrap" id="gifProgress" style="display:none;">
+        <div class="progress-bar" id="gifBar"></div>
+      </div>
+      <div class="gif-list" id="gifList">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);text-align:center;padding:16px 0;">
+          尚未上傳任何 GIF
+        </div>
+      </div>
+    </div>
+
+    <!-- 圖案 Tab -->
+    <div class="tab-content" id="tab-image">
+      <label class="upload-zone" id="imgZone">
+        <div class="upload-icon">🖼</div>
+        <div class="upload-text">
+          <strong>點擊或拖放圖片</strong><br>
+          PNG / JPG / BMP，自動縮放至 64×32
+        </div>
+        <input type="file" id="imgFile" accept="image/*" onchange="handleImageUpload(this.files[0])">
+      </label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="sendFrameToPanel()">📡 推送至面板</button>
+        <button class="btn btn-ghost" onclick="saveImageToFatfs()">💾 儲存至裝置</button>
+        <button class="btn btn-ghost" onclick="fitImage()">↔ 填滿</button>
+        <button class="btn btn-ghost" onclick="fitImageContain()">⬜ 等比縮放</button>
+      </div>
+    </div>
+
+    <!-- 設定 Tab -->
+    <div class="tab-content" id="tab-settings">
+      <!-- 系統資訊 -->
+      <div class="info-grid" style="margin-bottom:12px;">
+        <div class="info-cell">
+          <div class="info-key">IP ADDRESS</div>
+          <div class="info-val" id="infoIP">--</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-key">NTP SYNC</div>
+          <div class="info-val" id="infoNTP">--</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-key">WIFI MODE</div>
+          <div class="info-val" id="infoMode">--</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-key">STORAGE FREE</div>
+          <div class="info-val" id="infoStorage">--</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-key">USB MSC</div>
+          <div class="info-val" id="infoUsb">--</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-key">FATFS</div>
+          <div class="info-val" id="infoFatfs">--</div>
+        </div>
+      </div>
+
+      <!-- Wi-Fi 設定 -->
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:8px;letter-spacing:1px;">// WI-FI CONFIG</div>
+      <div class="input-row">
+        <input type="text"     id="wifiSSID" placeholder="SSID">
+      </div>
+      <div class="input-row">
+        <input type="password" id="wifiPass" placeholder="PASSWORD">
+        <button class="btn btn-danger" onclick="saveWiFi()">SAVE & REBOOT</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════
+const W = 64, H = 32;
+const PX = 9, GAP = 1;   // must match CSS --px, --gap
+
+// ═══════════════════════════════════════════════════════════
+// Canvas Setup
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('matrixCanvas');
+const ctx    = canvas.getContext('2d');
+canvas.width  = W * PX + (W - 1) * GAP;
+canvas.height = H * PX + (H - 1) * GAP;
+
+// Frame buffer: [r, g, b] per pixel
+const fb = new Uint8Array(W * H * 3).fill(0);
+
+// ─ Render frame buffer to canvas ──────────────────────────
+function renderFB() {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 3;
+      const r = fb[i], g = fb[i+1], b = fb[i+2];
+      const px = x * (PX + GAP), py = y * (PX + GAP);
+      // LED glow effect: bright pixel gets bloom
+      const bright = (r + g + b) / 3;
+      if (bright > 10) {
+        ctx.shadowColor  = `rgb(${r},${g},${b})`;
+        ctx.shadowBlur   = 4;
+      } else {
+        ctx.shadowBlur   = 0;
+      }
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(px, py, PX, PX);
+    }
+  }
+  ctx.shadowBlur = 0;
+}
+
+// ─ Set pixel in frame buffer ───────────────────────────────
+function setPixel(x, y, r, g, b) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const i = (y * W + x) * 3;
+  fb[i] = r; fb[i+1] = g; fb[i+2] = b;
+}
+
+function getPixel(x, y) {
+  const i = (y * W + x) * 3;
+  return [fb[i], fb[i+1], fb[i+2]];
+}
+
+// ─ Flood fill ─────────────────────────────────────────────
+function floodFill(sx, sy, nr, ng, nb) {
+  const [or, og, ob] = getPixel(sx, sy);
+  if (or===nr && og===ng && ob===nb) return;
+  const stack = [[sx, sy]];
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    const [cr, cg, cb] = getPixel(x, y);
+    if (cr!==or || cg!==og || cb!==ob) continue;
+    setPixel(x, y, nr, ng, nb);
+    if (x>0)   stack.push([x-1, y]);
+    if (x<W-1) stack.push([x+1, y]);
+    if (y>0)   stack.push([x, y-1]);
+    if (y<H-1) stack.push([x, y+1]);
+  }
+}
+
+// ─ Hex to RGB ─────────────────────────────────────────────
+function hexToRGB(hex) {
+  const n = parseInt(hex.replace('#',''), 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+
+// ═══════════════════════════════════════════════════════════
+// Drawing Tools
+// ═══════════════════════════════════════════════════════════
+let tool = 'draw';
+let drawColor = [0, 229, 255];
+let isMouseDown = false;
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn[id^="tool"]').forEach(b =>
+    b.classList.toggle('active', b.id === 'tool' + t.charAt(0).toUpperCase() + t.slice(1))
+  );
+}
+
+function setDrawColor(hex) {
+  drawColor = hexToRGB(hex);
+  document.getElementById('colorPicker').value = hex;
+  // update selected swatch
+  document.querySelectorAll('.swatch').forEach(s =>
+    s.classList.toggle('selected', s.dataset.hex === hex)
+  );
+}
+
+function clearCanvas() {
+  fb.fill(0);
+  renderFB();
+}
+
+// ─ Swatches ───────────────────────────────────────────────
+const SWATCHES = [
+  '#ff3d57','#ff6b35','#ffd740','#00e676',
+  '#00e5ff','#b57aff','#ffffff','#000000',
+  '#ff80ab','#40c4ff','#69ff47','#ff6d00',
+];
+const swatchEl = document.getElementById('swatches');
+SWATCHES.forEach(hex => {
+  const d = document.createElement('div');
+  d.className = 'swatch' + (hex === '#00e5ff' ? ' selected' : '');
+  d.style.background = hex;
+  d.dataset.hex = hex;
+  d.onclick = () => setDrawColor(hex);
+  swatchEl.appendChild(d);
+});
+
+// ─ Canvas mouse events ────────────────────────────────────
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / r.width;
+  const scaleY = canvas.height / r.height;
+  const cx = (e.clientX - r.left) * scaleX;
+  const cy = (e.clientY - r.top)  * scaleY;
+  const gx = Math.floor(cx / (PX + GAP));
+  const gy = Math.floor(cy / (PX + GAP));
+  return [Math.min(Math.max(gx,0),W-1), Math.min(Math.max(gy,0),H-1)];
+}
+
+function applyTool(x, y) {
+  if (tool === 'draw')  setPixel(x, y, ...drawColor);
+  if (tool === 'erase') setPixel(x, y, 0, 0, 0);
+  if (tool === 'fill')  floodFill(x, y, ...drawColor);
+  renderFB();
+}
+
+canvas.addEventListener('mousedown', e => {
+  isMouseDown = true;
+  applyTool(...canvasXY(e));
+});
+canvas.addEventListener('mousemove', e => {
+  const [x, y] = canvasXY(e);
+  document.getElementById('coordBadge').textContent = `X:${String(x).padStart(2,'0')} Y:${String(y).padStart(2,'0')}`;
+  if (isMouseDown && tool !== 'fill') applyTool(x, y);
+});
+canvas.addEventListener('mouseup',    () => isMouseDown = false);
+canvas.addEventListener('mouseleave', () => isMouseDown = false);
+
+// Touch support
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault(); isMouseDown = true;
+  applyTool(...canvasXY(e.touches[0]));
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (isMouseDown && tool !== 'fill') applyTool(...canvasXY(e.touches[0]));
+}, {passive:false});
+canvas.addEventListener('touchend', () => isMouseDown = false);
+
+// Initial render (dark grid)
+renderFB();
+
+// ═══════════════════════════════════════════════════════════
+// WebSocket
+// ═══════════════════════════════════════════════════════════
+let ws, wsReady = false;
+let streamTimer = null;
+
+function connectWS() {
+  try {
+    ws = new WebSocket(`ws://${location.hostname}/ws`);
+    ws.binaryType = 'arraybuffer';
+  } catch(e) { setTimeout(connectWS, 3000); return; }
+
+  ws.onopen = () => {
+    wsReady = true;
+    setDot(true);
+    showToast('CONNECTED');
+  };
+  ws.onclose = () => {
+    wsReady = false;
+    setDot(false);
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => { wsReady = false; setDot(false); };
+  ws.onmessage = e => {
+    if (typeof e.data === 'string') {
+      try { applyState(JSON.parse(e.data)); } catch(_) {}
+    }
+  };
+}
+
+function setDot(on) {
+  document.getElementById('wsDot').className  = 'chip-dot' + (on ? ' on' : '');
+  document.getElementById('wsLabel').textContent = on ? 'ONLINE' : 'OFFLINE';
+}
+
+function sendCmd(obj) {
+  if (!wsReady) { showToast('NOT CONNECTED'); return; }
+  ws.send(JSON.stringify(obj));
+}
+
+// ─ Send full frame buffer (RGB565 binary) ─────────────────
+// Format: 1 byte cmd=0x10, then 64×32×2 bytes RGB565 big-endian
+function sendFrameToPanel() {
+  if (!wsReady) { showToast('NOT CONNECTED'); return; }
+  const buf = new Uint8Array(1 + W * H * 2);
+  buf[0] = 0x10; // cmd: raw frame
+  let offset = 1;
+  for (let i = 0; i < W * H; i++) {
+    const r = fb[i*3] >> 3;
+    const g = fb[i*3+1] >> 2;
+    const b = fb[i*3+2] >> 3;
+    const rgb565 = (r << 11) | (g << 5) | b;
+    buf[offset++] = (rgb565 >> 8) & 0xFF;
+    buf[offset++] = rgb565 & 0xFF;
+  }
+  ws.send(buf.buffer);
+  showToast('FRAME SENT');
+}
+
+// ─ Streaming (投屏) ────────────────────────────────────────
+let streaming = false;
+function startStream() {
+  if (!wsReady) { showToast('NOT CONNECTED'); return; }
+  streaming = true;
+  const badge = document.getElementById('streamBadge');
+  badge.classList.add('active');
+  document.getElementById('streamLabel').textContent = 'LIVE';
+  sendCmd({ cmd: 'setMode', value: 3 }); // 切到圖案模式
+  streamTimer = setInterval(() => {
+    if (!streaming || !wsReady) { stopStream(); return; }
+    sendFrameToPanel();
+  }, 100); // 10fps
+}
+function stopStream() {
+  streaming = false;
+  clearInterval(streamTimer);
+  const badge = document.getElementById('streamBadge');
+  badge.classList.remove('active');
+  document.getElementById('streamLabel').textContent = 'IDLE';
+}
+
+// ═══════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════
+function applyState(d) {
+  if (d.mode !== undefined) setModeUI(d.mode);
+  if (d.brightness !== undefined) {
+    document.getElementById('brightness').value = d.brightness;
+    document.getElementById('bVal').textContent = d.brightness;
+  }
+  if (d.text !== undefined)
+    document.getElementById('scrollText').value = d.text;
+  if (d.speed !== undefined) {
+    document.getElementById('speed').value = d.speed;
+    document.getElementById('sVal').textContent = d.speed + 'ms';
+  }
+  if (d.ip !== undefined) document.getElementById('infoIP').textContent = d.ip;
+  if (d.ntpSynced !== undefined) {
+    const el = document.getElementById('infoNTP');
+    el.textContent = d.ntpSynced ? 'SYNCED' : 'NO SYNC';
+    el.className   = 'info-val ' + (d.ntpSynced ? 'ok' : 'err');
+  }
+  if (d.apMode !== undefined)
+    document.getElementById('infoMode').textContent = d.apMode ? 'AP HOTSPOT' : 'STA';
+  if (d.usbMounted !== undefined) {
+    const el = document.getElementById('infoUsb');
+    el.textContent = d.usbMounted ? 'ACTIVE' : 'IDLE';
+    el.className   = 'info-val ' + (d.usbMounted ? 'warn' : 'ok');
+  }
+  if (d.fatfsOk !== undefined) {
+    const el = document.getElementById('infoFatfs');
+    el.textContent = d.fatfsOk ? 'MOUNTED' : 'ERROR';
+    el.className   = 'info-val ' + (d.fatfsOk ? 'ok' : 'err');
+  }
+  if (d.fatfsFree !== undefined)
+    document.getElementById('infoStorage').textContent = d.fatfsFree + ' KB';
+}
+
+// ═══════════════════════════════════════════════════════════
+// Mode / Controls
+// ═══════════════════════════════════════════════════════════
+function setMode(m) {
+  sendCmd({ cmd: 'setMode', value: m });
+  setModeUI(m);
+}
+function setModeUI(m) {
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.classList.toggle('active', +b.dataset.mode === m)
+  );
+}
+function sendScrollText() {
+  const t = document.getElementById('scrollText').value.trim();
+  if (!t) return;
+  sendCmd({ cmd: 'setText', value: t });
+  setMode(1);
+  showToast('TEXT SENT');
+}
+
+// ═══════════════════════════════════════════════════════════
+// GIF Upload
+// ═══════════════════════════════════════════════════════════
+function handleGifUpload(files) {
+  [...files].forEach(file => uploadGif(file));
+}
+
+function uploadGif(file) {
+  const prog = document.getElementById('gifProgress');
+  const bar  = document.getElementById('gifBar');
+  prog.style.display = 'block';
+  bar.style.width = '0%';
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/gif/upload');
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable)
+      bar.style.width = (e.loaded / e.total * 100) + '%';
+  };
+  xhr.onload = () => {
+    prog.style.display = 'none';
+    if (xhr.status === 200) {
+      showToast('GIF UPLOADED: ' + file.name);
+      refreshGifList();
+    } else {
+      showToast('UPLOAD FAILED');
+    }
+  };
+  xhr.onerror = () => { prog.style.display = 'none'; showToast('UPLOAD ERROR'); };
+
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  xhr.send(fd);
+}
+
+function refreshGifList() {
+  fetch('/api/gif/list')
+    .then(r => r.json())
+    .then(list => renderGifList(list))
+    .catch(() => {});
+}
+
+function renderGifList(list) {
+  const el = document.getElementById('gifList');
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--text3);text-align:center;padding:16px 0;">尚未上傳任何 GIF</div>';
+    return;
+  }
+  el.innerHTML = list.map((f, i) => `
+    <div class="gif-item">
+      <div>
+        <div class="gif-name">${f.name}</div>
+        <div class="gif-size">${(f.size/1024).toFixed(1)} KB</div>
+      </div>
+      <div class="gif-actions">
+        <button class="btn btn-ghost" style="padding:5px 8px;font-size:10px;"
+          onclick="playGif('${f.name}')">▶ 播放</button>
+        <button class="btn btn-danger" style="padding:5px 8px;font-size:10px;"
+          onclick="deleteGif('${f.name}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function playGif(name) {
+  sendCmd({ cmd: 'playGif', value: name });
+  setMode(2);
+  showToast('PLAYING: ' + name);
+}
+
+function deleteGif(name) {
+  if (!confirm(`刪除 ${name}？`)) return;
+  fetch('/api/gif/delete', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name })
+  }).then(() => { refreshGifList(); showToast('DELETED'); });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Image Upload → Canvas
+// ═══════════════════════════════════════════════════════════
+let imgOriginal = null; // ImageData at original size
+
+function handleImageUpload(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      imgOriginal = img;
+      drawImageToFB(img, true); // contain mode default
+      renderFB();
+      showToast('IMAGE LOADED — ' + file.name);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function drawImageToFB(img, contain) {
+  // Draw to offscreen canvas scaled to 64×32
+  const oc = document.createElement('canvas');
+  oc.width = W; oc.height = H;
+  const octx = oc.getContext('2d');
+  octx.fillStyle = '#000';
+  octx.fillRect(0, 0, W, H);
+
+  let dw, dh, dx, dy;
+  if (contain) {
+    const scale = Math.min(W / img.width, H / img.height);
+    dw = img.width  * scale;
+    dh = img.height * scale;
+    dx = (W - dw) / 2;
+    dy = (H - dh) / 2;
+  } else {
+    dw = W; dh = H; dx = 0; dy = 0;
+  }
+  octx.drawImage(img, dx, dy, dw, dh);
+
+  const data = octx.getImageData(0, 0, W, H).data;
+  for (let i = 0; i < W * H; i++) {
+    fb[i*3]   = data[i*4];
+    fb[i*3+1] = data[i*4+1];
+    fb[i*3+2] = data[i*4+2];
+  }
+}
+
+function fitImage() {
+  if (!imgOriginal) return;
+  drawImageToFB(imgOriginal, false);
+  renderFB();
+}
+function fitImageContain() {
+  if (!imgOriginal) return;
+  drawImageToFB(imgOriginal, true);
+  renderFB();
+}
+
+function saveImageToFatfs() {
+  if (!wsReady) { showToast('NOT CONNECTED'); return; }
+  sendCmd({ cmd: 'saveFrame' });
+  showToast('FRAME SAVED TO DEVICE');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Wi-Fi
+// ═══════════════════════════════════════════════════════════
+function saveWiFi() {
+  const ssid = document.getElementById('wifiSSID').value.trim();
+  const pass = document.getElementById('wifiPass').value;
+  if (!ssid) { showToast('SSID REQUIRED'); return; }
+  if (!confirm(`連線至「${ssid}」並重新啟動？`)) return;
+  sendCmd({ cmd: 'setWiFi', ssid, password: pass });
+  showToast('REBOOTING...');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Tab switching
+// ═══════════════════════════════════════════════════════════
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const ids = ['clock','text','gif','image','settings'];
+    t.classList.toggle('active', ids[i] === id);
+  });
+  document.querySelectorAll('.tab-content').forEach(c =>
+    c.classList.toggle('active', c.id === 'tab-' + id)
+  );
+  if (id === 'gif') refreshGifList();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Clock
+// ═══════════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('clockTime').textContent =
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const days = ['日','一','二','三','四','五','六'];
+  document.getElementById('clockDate').textContent =
+    `${now.getFullYear()}.${pad(now.getMonth()+1)}.${pad(now.getDate())}　週${days[now.getDay()]}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Toast
+// ═══════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Drag & Drop zones
+// ═══════════════════════════════════════════════════════════
+['gifZone','imgZone'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drag'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('drag');
+    const files = e.dataTransfer.files;
+    if (id === 'gifZone') handleGifUpload(files);
+    else if (files[0])    handleImageUpload(files[0]);
+  });
+});
+
+// Enter key for scroll text
+document.getElementById('scrollText').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendScrollText();
+});
+
+// ═══════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════
+connectWS();
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+</body>
+</html>

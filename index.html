@@ -1,0 +1,517 @@
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>羽球球隊自動化計分系統</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+
+    :root { 
+      --red: #ff3333; --green: #33ff33; --blue: #00d2ff; --bg: #111; 
+      --btn-gray: #1a1a1a;
+      --font-score: 18vw;
+      --font-label: 4vw; 
+    }
+    
+    body { 
+      font-family: 'Orbitron', sans-serif; 
+      background-color: #000; color: white; 
+      margin: 0; padding: 0;
+      display: flex; flex-direction: column; 
+      height: 100vh; width: 100vw;
+      overflow: hidden; 
+    }
+    
+    .tabs { display: flex; background: #222; flex-shrink: 0; }
+    .tab { flex: 1; padding: 15px 0; text-align: center; cursor: pointer; font-size: 1.2rem; font-weight: bold; border-bottom: 3px solid transparent; }
+    .tab.active { border-bottom: 3px solid var(--blue); color: var(--blue); }
+
+    .page { display: none; flex-direction: column; height: 100%; padding: 10px; box-sizing: border-box; overflow-y: auto; }
+    .page.active { display: flex; }
+
+    .form-group { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input[type="text"], input[type="number"], select { padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; font-size: 1rem; flex: 1; min-width: 100px;}
+    button.action-btn { padding: 10px 15px; background: var(--blue); color: black; border: none; border-radius: 5px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+    button.action-btn:active { transform: translateY(2px); }
+    
+    .list-container { background: #1a1a1a; padding: 10px; border-radius: 8px; flex: 1; overflow-y: auto; margin-bottom: 10px; }
+    .list-item { display: flex; justify-content: space-between; padding: 10px 8px; border-bottom: 1px solid #333; font-family: sans-serif; align-items: center; }
+    .list-item:last-child { border-bottom: none; }
+    
+    .player-checkbox { width: 22px; height: 22px; cursor: pointer; accent-color: var(--blue); }
+    .player-label { display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1; font-size: 1.2rem; }
+    .player-label.inactive { color: #666; text-decoration: line-through; }
+
+    /* 賽程列表樣式擴充 */
+    .match-item { background: #222; margin-bottom: 10px; padding: 10px; border-radius: 8px; border-left: 4px solid var(--blue); cursor: pointer; position: relative; }
+    .match-item:hover { background: #333; }
+    .match-item.completed { border-left: 4px solid #666; background: #1a1a1a; opacity: 0.8; cursor: default; }
+    .match-item.locked { border-left: 4px solid #f39c12; background: #2a2a2a; opacity: 0.6; cursor: not-allowed; }
+    
+    .match-title { font-weight: bold; margin-bottom: 5px; font-size: 1.1rem; color: #eee; }
+    .match-team { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; }
+    .team-a-text { color: var(--red); }
+    .team-b-text { color: var(--green); }
+    .trophy { font-size: 1.2rem; display: none; }
+    .is-winner .trophy { display: inline-block; }
+    .is-winner { font-weight: 900; text-decoration: underline; }
+    
+    .match-score-display { position: absolute; top: 10px; right: 15px; font-size: 1.5rem; font-weight: bold; color: #fff; background: #444; padding: 2px 8px; border-radius: 5px; }
+
+    /* 計分板樣式 */
+    .scoreboard-layout { display: flex; gap: 10px; flex: 1; min-height: 0; margin-bottom: 10px; }
+    .score-column { flex: 1; display: flex; flex-direction: column; }
+    .score-box { background: var(--bg); border: 2px solid #333; border-radius: 12px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: center; position: relative; overflow: hidden; padding: 10px 0; cursor: pointer; }
+    .players-area { display: flex; width: 100%; justify-content: space-around; font-family: sans-serif; z-index: 2; min-height: 10vh; align-items: center; margin: 5px 0; }
+    .player-name { font-size: var(--font-label); color: #ccc; transition: all 0.2s; padding: 5px 10px; border-radius: 8px; text-align: center; width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; display: flex; justify-content: center; align-items: center; line-height: 1.2; cursor: pointer; }
+    .player-name:active { transform: scale(0.92); opacity: 0.7; }
+    .is-serving { font-size: calc(var(--font-label) * 1.3); color: #fff; font-weight: bold; background: rgba(255,255,255,0.2); border: 3px solid #fff; }
+    .team-a .score-val { color: var(--red); }
+    .team-b .score-val { color: var(--green); }
+    .score-val { font-size: var(--font-score); line-height: 1; z-index: 2; margin: auto; pointer-events: none; display: inline-block; }
+    .score-box.serving { border: 4px solid #fff; }
+
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-15px); } 40%, 80% { transform: translateX(15px); } }
+    .shake { animation: shake 0.4s ease-in-out; }
+
+    .control-bar { display: flex; gap: 5px; height: 12vh; flex-shrink: 0; }
+    .control-bar button { flex: 1; border: none; border-radius: 8px; font-weight: bold; font-size: 2.5vh; cursor: pointer; touch-action: manipulation; }
+    .btn-a-plus { background: var(--red); color: white; }
+    .btn-a-minus { background: var(--btn-gray); color: var(--red); border: 1.5px solid var(--red); }
+    .btn-reset { background: transparent; border: 2.5px solid var(--blue) !important; color: var(--blue); font-size: 1.8vh !important; }
+    .btn-b-plus { background: var(--green); color: black; }
+    .btn-b-minus { background: var(--btn-gray); color: var(--green); border: 1.5px solid var(--green); }
+    button:active { filter: brightness(1.5); transform: translateY(2px); }
+    button:disabled { opacity: 0.2; }
+
+    @media (orientation: landscape) { :root { --font-score: 35vh; --font-label: 4vh; } .control-bar { height: 15vh; } }
+  </style>
+</head>
+<body>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tab-players', this)">名單管理</div>
+    <div class="tab" onclick="switchTab('tab-schedule', this)">排程設定</div>
+    <div class="tab" onclick="switchTab('tab-scoreboard', this)">計分板</div>
+  </div>
+
+  <div id="tab-players" class="page active">
+    <div class="form-group">
+      <input type="text" id="playerName" placeholder="輸入姓名 (按Enter新增)" autocomplete="off" onkeydown="if(event.keyCode===13) addPlayer()">
+      <button class="action-btn" onclick="addPlayer()">儲存</button>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+      <h3 style="margin: 0;">球員資料庫</h3>
+      <div style="font-size: 0.9rem; color: #aaa;">
+        本次上場: <span id="activeCount" style="color:var(--blue); font-weight:bold; font-size: 1.2rem;">0</span> 人
+      </div>
+    </div>
+    <div class="list-container" id="playerList"></div>
+  </div>
+
+  <div id="tab-schedule" class="page">
+    <div class="form-group">
+      <select id="scheduleMode" style="flex: 2; font-weight: bold; color: var(--blue);">
+        <option value="random">一般亂數配對</option>
+        <option value="tournament4">🏆 四強錦標賽 (贏打贏、輸打輸)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>賽制:</label>
+      <select id="matchType" onchange="updatePlayerUI()">
+        <option value="2">單打(2人)</option>
+        <option value="4" selected>雙打(4人)</option>
+        <option value="6">三對三(6人)</option>
+      </select>
+      <label>場地:</label>
+      <input type="number" id="courtCount" value="1" min="1" max="10" style="flex: 0.5;">
+    </div>
+    <button class="action-btn" style="width: 100%; margin-bottom: 15px;" onclick="generateSchedule()">🎲 產生賽程 (依打勾人數)</button>
+    
+    <h3>當前賽程進度</h3>
+    <div class="list-container" id="scheduleList" style="flex: 1;"></div>
+  </div>
+
+  <div id="tab-scoreboard" class="page">
+    <div style="text-align: center; font-family: sans-serif; margin-bottom: 5px; color: #aaa;" id="currentMatchLabel">尚未載入賽程 (可直接手動計分)</div>
+    <div class="scoreboard-layout">
+      <div id="panel-A" class="score-column score-box team-a serving" onclick="setInitialServe('A')">
+        <div class="players-area">
+          <div id="A-left" class="player-name" onclick="swapPlayers('A', event)"></div>
+          <div id="A-right" class="player-name is-serving" onclick="swapPlayers('A', event)">🏸 Player1</div>
+        </div>
+        <div id="score-A" class="score-val">00</div>
+      </div>
+      <div id="panel-B" class="score-column score-box team-b" onclick="setInitialServe('B')">
+        <div class="players-area">
+          <div id="B-left" class="player-name" onclick="swapPlayers('B', event)"></div>
+          <div id="B-right" class="player-name" onclick="swapPlayers('B', event)">Player2</div>
+        </div>
+        <div id="score-B" class="score-val">00</div>
+      </div>
+    </div>
+    <div class="control-bar">
+      <button id="btn-A-plus" class="btn-a-plus" onclick="changeScore('A', 1)">+1</button>
+      <button class="btn-a-minus" onclick="changeScore('A', -1)">-1</button>
+      <button class="btn-reset" onclick="endMatch()">結束儲存</button>
+      <button id="btn-B-plus" class="btn-b-plus" onclick="changeScore('B', 1)">+1</button>
+      <button class="btn-b-minus" onclick="changeScore('B', -1)">-1</button>
+    </div>
+  </div>
+
+  <script>
+    // --- 資料庫 ---
+    let players = [];
+    try {
+      const savedData = localStorage.getItem('badmintonPlayersList');
+      if (savedData) players = JSON.parse(savedData);
+    } catch (e) { players = []; }
+
+    let schedule = [];
+    let activeMatchIndex = -1;
+
+    let scoreA = 0, scoreB = 0, gameOver = false;
+    let servingTeam = 'A';
+    let teamA_players = { left: null, right: null }; 
+    let teamB_players = { left: null, right: null };
+
+    function savePlayersToLocal() {
+      try { localStorage.setItem('badmintonPlayersList', JSON.stringify(players)); } catch (e) {}
+      updatePlayerList();
+    }
+
+    function switchTab(tabId, element) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      if(element) element.classList.add('active');
+      else document.querySelector(`[onclick*="${tabId}"]`).classList.add('active'); 
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // ==========================================
+    // ⭐ 修改重點：前端與 ESP32 的通訊函式
+    // ==========================================
+    function sendCmd(cmd) { 
+      try {
+        if (navigator.vibrate) navigator.vibrate(35); 
+        
+        // 1. 從 DOM 取得目前四個位置的球員名字 (並過濾掉羽球圖示 '🏸')
+        // 這樣不管是單打還是雙打，前端顯示什麼，ESP32就收到什麼
+        let aLeft = document.getElementById('A-left').innerText.replace('🏸', '').trim();
+        let aRight = document.getElementById('A-right').innerText.replace('🏸', '').trim();
+        let bLeft = document.getElementById('B-left').innerText.replace('🏸', '').trim();
+        let bRight = document.getElementById('B-right').innerText.replace('🏸', '').trim();
+
+        // 2. 打包所有狀態成 URL 參數 (URLSearchParams 會自動處理中文編碼)
+        const params = new URLSearchParams({
+          action: cmd,          // 觸發的動作 (保留以供 Debug 參考)
+          scoreA: scoreA,       // A隊分數
+          scoreB: scoreB,       // B隊分數
+          serve: servingTeam,   // 'A' 或 'B'
+          al: aLeft,            // A隊左邊球員
+          ar: aRight,           // A隊右邊球員
+          bl: bLeft,            // B隊左邊球員
+          br: bRight            // B隊右邊球員
+        });
+
+        // 3. 發送 GET 請求給 ESP32 (使用 /update 路徑)
+        let requestUrl = '/update?' + params.toString();
+        console.log("發送狀態同步:", requestUrl); // 可在 F12 開發者工具查看
+        
+        fetch(requestUrl).catch(() => console.log("ESP32 未連線")); 
+      } catch(e) {}
+    }
+
+    // --- 名單管理 ---
+    function addPlayer() {
+      const nameInput = document.getElementById('playerName');
+      const name = nameInput.value.trim();
+      if(name) {
+        if(players.some(p => p.name === name)) { alert('已存在此球員！'); return; }
+        players.push({ name: name, active: true });
+        nameInput.value = '';
+        savePlayersToLocal();
+      }
+    }
+    function removePlayer(index) { if(confirm(`刪除 [${players[index].name}]？`)) { players.splice(index, 1); savePlayersToLocal(); } }
+    function toggleActive(index) { players[index].active = !players[index].active; savePlayersToLocal(); }
+    
+    function updatePlayerList() {
+      const list = document.getElementById('playerList');
+      list.innerHTML = '';
+      let activeCount = 0;
+      players.forEach((p, i) => {
+        if(p.active) activeCount++;
+        let checkedStr = p.active ? 'checked' : '';
+        let labelClass = p.active ? 'player-label' : 'player-label inactive';
+        list.innerHTML += `
+          <div class="list-item">
+            <label class="${labelClass}">
+              <input type="checkbox" class="player-checkbox" ${checkedStr} onchange="toggleActive(${i})">
+              <span>${p.name}</span>
+            </label>
+            <button onclick="removePlayer(${i})" style="background:transparent; border:1px solid #555; color:#888; border-radius:5px; padding:5px 10px;">刪除</button>
+          </div>`;
+      });
+      document.getElementById('activeCount').innerText = activeCount;
+    }
+    updatePlayerList();
+
+    // --- 排程邏輯 ---
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function generateSchedule() {
+      const mode = document.getElementById('scheduleMode').value;
+      const matchSize = parseInt(document.getElementById('matchType').value); 
+      const courts = parseInt(document.getElementById('courtCount').value);
+      let activePlayers = players.filter(p => p.active);
+      schedule = [];
+
+      if (mode === 'tournament4') {
+        const requiredPlayers = matchSize * 2; 
+        if(activePlayers.length < requiredPlayers) {
+            alert(`四強錦標賽模式需要剛好 ${requiredPlayers} 人參與！目前打勾 ${activePlayers.length} 人。`);
+            return;
+        }
+        
+        let shuffled = shuffleArray([...activePlayers]).slice(0, requiredPlayers);
+        let teamSize = matchSize / 2;
+        let t1 = shuffled.slice(0, teamSize);
+        let t2 = shuffled.slice(teamSize, teamSize*2);
+        let t3 = shuffled.slice(teamSize*2, teamSize*3);
+        let t4 = shuffled.slice(teamSize*3, teamSize*4);
+
+        schedule.push({ id: 0, title: '【四強初賽 1】', teamA: t1, teamB: t2, status: 'pending', scoreA: 0, scoreB: 0, winner: null });
+        schedule.push({ id: 1, title: '【四強初賽 2】', teamA: t3, teamB: t4, status: 'pending', scoreA: 0, scoreB: 0, winner: null });
+        schedule.push({ id: 2, title: '【季軍戰】(輸打輸)', teamA: [{name:'初賽1 敗者', isTBD:true}], teamB: [{name:'初賽2 敗者', isTBD:true}], status: 'locked', scoreA: 0, scoreB: 0, winner: null });
+        schedule.push({ id: 3, title: '🏆【冠軍戰】(贏打贏)', teamA: [{name:'初賽1 勝者', isTBD:true}], teamB: [{name:'初賽2 勝者', isTBD:true}], status: 'locked', scoreA: 0, scoreB: 0, winner: null });
+        
+        alert('錦標賽樹狀賽程已生成！');
+
+      } else {
+        if(activePlayers.length < matchSize) { alert(`人數不足！需要至少 ${matchSize} 人。`); return; }
+        let shuffled = shuffleArray([...activePlayers]);
+        let matchCount = Math.min(courts, Math.floor(shuffled.length / matchSize));
+        if(matchCount === 0) matchCount = 1;
+
+        for(let i=0; i<matchCount; i++) {
+          let teamSize = matchSize / 2;
+          let tA = shuffled.slice(i*matchSize, i*matchSize + teamSize);
+          let tB = shuffled.slice(i*matchSize + teamSize, i*matchSize + matchSize);
+          schedule.push({ id: i, title: `一般場次 ${i+1}`, teamA: tA, teamB: tB, status: 'pending', scoreA: 0, scoreB: 0, winner: null });
+        }
+        alert(`已產生 ${schedule.length} 場一般賽程！`);
+      }
+      updateScheduleList();
+    }
+
+    function updateScheduleList() {
+      const list = document.getElementById('scheduleList');
+      list.innerHTML = '';
+      
+      if(schedule.length === 0) { list.innerHTML = '<div style="color:#666; text-align:center; padding: 20px;">尚未產生賽程</div>'; return; }
+
+      schedule.forEach((match, i) => {
+        let aNames = match.teamA.map(p => p.name).join(' & ');
+        let bNames = match.teamB.map(p => p.name).join(' & ');
+        
+        let classNames = 'match-item';
+        let onClickFn = `onclick="loadMatch(${i})"`;
+        let scoreHTML = '';
+        let aWinClass = '', bWinClass = '';
+
+        if (match.status === 'completed') {
+            classNames += ' completed';
+            onClickFn = ''; 
+            scoreHTML = `<div class="match-score-display">${match.scoreA} : ${match.scoreB}</div>`;
+            if (match.winner === 'A') aWinClass = 'is-winner';
+            if (match.winner === 'B') bWinClass = 'is-winner';
+        } else if (match.status === 'locked') {
+            classNames += ' locked';
+            onClickFn = 'onclick="alert(\'請先完成前面的初賽！\')"';
+        }
+
+        list.innerHTML += `
+          <div class="${classNames}" ${onClickFn}>
+            ${scoreHTML}
+            <div class="match-title">${match.title} ${match.status==='completed' ? '<span style="color:#aaa;font-size:0.9rem;">(已完賽)</span>' : ''}</div>
+            <div class="match-team team-a-text ${aWinClass}">[A] ${aNames} <span class="trophy">🏆</span></div>
+            <div class="match-team team-b-text ${bWinClass}">[B] ${bNames} <span class="trophy">🏆</span></div>
+          </div>`;
+      });
+    }
+
+    function loadMatch(index) {
+      if(schedule[index].status === 'completed' || schedule[index].status === 'locked') return;
+      
+      activeMatchIndex = index;
+      let match = schedule[index];
+      
+      teamA_players.right = match.teamA[0]; teamA_players.left = match.teamA[1] || null; 
+      teamB_players.right = match.teamB[0]; teamB_players.left = match.teamB[1] || null;
+
+      let aNames = match.teamA.map(p => p.name).join(' & ');
+      let bNames = match.teamB.map(p => p.name).join(' & ');
+      document.getElementById('currentMatchLabel').innerText = `${match.title}: [A] ${aNames} VS [B] ${bNames}`;
+
+      if(match.teamA.length === 1) document.getElementById('matchType').value = "2";
+
+      resetScoreData();
+      updatePlayerUI();
+      switchTab('tab-scoreboard'); 
+    }
+
+    function processTournamentAdvance(matchIndex, winnerTeam) {
+        if (document.getElementById('scheduleMode').value !== 'tournament4') return;
+        if (matchIndex > 1) return; 
+
+        let match = schedule[matchIndex];
+        let winningPlayers = winnerTeam === 'A' ? match.teamA : match.teamB;
+        let losingPlayers = winnerTeam === 'A' ? match.teamB : match.teamA;
+
+        if (matchIndex === 0) {
+            schedule[2].teamA = losingPlayers; 
+            schedule[3].teamA = winningPlayers; 
+        } else if (matchIndex === 1) {
+            schedule[2].teamB = losingPlayers; 
+            schedule[3].teamB = winningPlayers; 
+        }
+
+        if (schedule[2].teamA[0].isTBD === undefined && schedule[2].teamB[0].isTBD === undefined) {
+            schedule[2].status = 'pending';
+            schedule[3].status = 'pending';
+        }
+    }
+
+    function endMatch() {
+      if(activeMatchIndex === -1) { alert('請先從排程設定載入比賽！'); return; }
+
+      if(confirm('結束並儲存這場比賽紀錄？')) {
+        let match = schedule[activeMatchIndex];
+        match.status = 'completed';
+        match.scoreA = scoreA;
+        match.scoreB = scoreB;
+        match.winner = scoreA > scoreB ? 'A' : (scoreB > scoreA ? 'B' : 'Tie');
+
+        processTournamentAdvance(activeMatchIndex, match.winner);
+
+        updateScheduleList();
+        resetScoreData();
+        sendCmd('RESET');
+        
+        switchTab('tab-schedule');
+        activeMatchIndex = -1;
+      }
+    }
+
+    function setInitialServe(team) {
+      if (scoreA > 0 || scoreB > 0) return;
+      servingTeam = team; 
+      updatePlayerUI(); 
+      sendCmd(team + '_SRV');
+    }
+
+    function swapPlayers(team, event) {
+      if(event) event.stopPropagation();
+      if (document.getElementById('matchType').value === '2') return;
+      if (scoreA > 0 || scoreB > 0) {
+        let scoreEl = document.getElementById('score-' + team);
+        scoreEl.classList.add('shake');
+        setTimeout(() => scoreEl.classList.remove('shake'), 400); 
+        return;
+      }
+      if (team === 'A') { let temp = teamA_players.left; teamA_players.left = teamA_players.right; teamA_players.right = temp; } 
+      else if (team === 'B') { let temp = teamB_players.left; teamB_players.left = teamB_players.right; teamB_players.right = temp; }
+      updatePlayerUI();
+      // 切換球員後發送狀態給 ESP32
+      sendCmd('SWAP'); 
+    }
+
+    function processBadmintonLogic(scorerTeam) {
+      let isSingles = document.getElementById('matchType').value === '2';
+      if (servingTeam === scorerTeam) {
+        if(!isSingles) {
+          if(scorerTeam === 'A') { let temp = teamA_players.right; teamA_players.right = teamA_players.left; teamA_players.left = temp; } 
+          else { let temp = teamB_players.right; teamB_players.right = teamB_players.left; teamB_players.left = temp; }
+        }
+      } else { servingTeam = scorerTeam; }
+      updatePlayerUI();
+    }
+
+    function updatePlayerUI() {
+      const formatName = (p) => p && !p.isTBD ? p.name : '';
+      let isSingles = document.getElementById('matchType').value === '2';
+      let servingId = servingTeam === 'A' ? ((scoreA % 2 === 0) ? 'A-right' : 'A-left') : ((scoreB % 2 === 0) ? 'B-right' : 'B-left');
+
+      document.getElementById('panel-A').classList.toggle('serving', servingTeam === 'A');
+      document.getElementById('panel-B').classList.toggle('serving', servingTeam === 'B');
+
+      let match = activeMatchIndex !== -1 ? schedule[activeMatchIndex] : {teamA:[{}], teamB:[{}]};
+      let pA_name = formatName(match.teamA[0]);
+      let pB_name = formatName(match.teamB[0]);
+
+      const slots = {
+        'A-right': isSingles ? ((scoreA % 2 === 0) ? pA_name : '') : (formatName(teamA_players.right) || 'A-R'),
+        'A-left': isSingles ? ((scoreA % 2 !== 0) ? pA_name : '') : (formatName(teamA_players.left) || 'A-L'),
+        'B-right': isSingles ? ((scoreB % 2 === 0) ? pB_name : '') : (formatName(teamB_players.right) || 'B-R'),
+        'B-left': isSingles ? ((scoreB % 2 !== 0) ? pB_name : '') : (formatName(teamB_players.left) || 'B-L')
+      };
+
+      for (let id in slots) {
+        let el = document.getElementById(id);
+        if (slots[id] && id === servingId) { el.innerText = '🏸 ' + slots[id]; el.classList.add('is-serving'); } 
+        else { el.innerText = slots[id]; el.classList.remove('is-serving'); }
+      }
+    }
+
+    function changeScore(team, val) {
+      if (gameOver && val > 0) return;
+      if (team === 'A') {
+        if(val > 0) { scoreA++; processBadmintonLogic('A'); } else { scoreA = Math.max(0, scoreA - 1); } 
+      } else {
+        if(val > 0) { scoreB++; processBadmintonLogic('B'); } else { scoreB = Math.max(0, scoreB - 1); }
+      }
+
+      document.getElementById('score-A').innerText = scoreA.toString().padStart(2, '0');
+      document.getElementById('score-B').innerText = scoreB.toString().padStart(2, '0');
+      
+      // 更新完 UI 後發送整體狀態給 ESP32
+      sendCmd(team + (val > 0 ? '_PLUS' : '_MINUS'));
+      
+      if (val < 0) {
+        gameOver = false;
+        document.querySelectorAll('.score-box').forEach(el => el.classList.remove('winner'));
+        document.getElementById('btn-A-plus').disabled = false; document.getElementById('btn-B-plus').disabled = false;
+        updatePlayerUI(); 
+      }
+      checkWinner();
+    }
+
+    function checkWinner() {
+      let winner = null;
+      if ((scoreA >= 21 && (scoreA - scoreB) >= 2) || scoreA === 30) winner = 'A';
+      else if ((scoreB >= 21 && (scoreB - scoreA) >= 2) || scoreB === 30) winner = 'B';
+      if (winner) {
+        gameOver = true;
+        document.getElementById('panel-' + winner).classList.add('winner');
+        document.getElementById('btn-A-plus').disabled = true; document.getElementById('btn-B-plus').disabled = true;
+      }
+    }
+
+    function resetScoreData() {
+      scoreA = 0; scoreB = 0; gameOver = false; servingTeam = 'A';
+      document.getElementById('score-A').innerText = '00'; document.getElementById('score-B').innerText = '00';
+      document.querySelectorAll('.score-box').forEach(el => el.classList.remove('winner'));
+      document.getElementById('btn-A-plus').disabled = false; document.getElementById('btn-B-plus').disabled = false;
+      document.getElementById('currentMatchLabel').innerText = '尚未載入賽程 (可直接手動計分)';
+      updatePlayerUI();
+    }
+  </script>
+</body>
+</html>

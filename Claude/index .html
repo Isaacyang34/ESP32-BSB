@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Matrix 控制台</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --bg2: #1a1a1f;
+    --bg3: #242429;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8e8ec;
+    --text2: #8888a0;
+    --accent: #00c8ff;
+    --accent2: #ff6420;
+    --green: #00e676;
+    --red: #ff4444;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+    font-size: 15px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .header h1 span { color: var(--accent); }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    display: inline-block;
+    margin-right: 6px;
+    transition: background 0.3s;
+  }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-label { font-size: 12px; color: var(--text2); }
+
+  /* Panel 模擬器 */
+  .panel-preview {
+    background: #000;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-label { font-size: 11px; color: var(--text2); letter-spacing: 0.5px; text-transform: uppercase; }
+  canvas#preview {
+    image-rendering: pixelated;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 384px; /* 64px × 6 */
+    height: auto;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+  }
+
+  /* Mode selector */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .mode-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text2);
+    padding: 10px 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .mode-btn .icon { font-size: 20px; }
+  .mode-btn:hover { border-color: var(--accent); color: var(--text); }
+  .mode-btn.active {
+    background: rgba(0, 200, 255, 0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Slider */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .slider-row label { font-size: 13px; color: var(--text2); min-width: 48px; }
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg3);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(0,200,255,0.4);
+  }
+  .slider-val {
+    font-size: 13px;
+    color: var(--text);
+    min-width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Text input */
+  .input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  input[type=text] {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus { border-color: var(--accent); }
+  input[type=text]::placeholder { color: var(--text2); }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:active { opacity: 0.7; }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+
+  /* Info row */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .key { color: var(--text2); }
+  .info-row .val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .val.ok { color: var(--green); }
+  .val.err { color: var(--red); }
+
+  /* Wi-Fi 設定 */
+  .wifi-form { display: flex; flex-direction: column; gap: 8px; }
+  .wifi-form input { margin: 0; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 20px;
+    border-radius: 999px;
+    transition: transform 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Clock display */
+  .clock-display {
+    text-align: center;
+    padding: 8px 0;
+  }
+  .clock-time {
+    font-size: 36px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .clock-date {
+    font-size: 13px;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>LED <span>Matrix</span></h1>
+  <div>
+    <span class="status-dot" id="wsDot"></span>
+    <span class="status-label" id="wsLabel">連線中...</span>
+  </div>
+</div>
+
+<!-- 面板預覽 -->
+<div class="panel-preview">
+  <div class="panel-label">64 × 32 Preview</div>
+  <canvas id="preview" width="64" height="32"></canvas>
+</div>
+
+<!-- 本機時鐘 -->
+<div class="card">
+  <div class="card-title">目前時間</div>
+  <div class="clock-display">
+    <div class="clock-time" id="clockTime">--:--:--</div>
+    <div class="clock-date" id="clockDate">--</div>
+  </div>
+</div>
+
+<!-- 顯示模式 -->
+<div class="card">
+  <div class="card-title">顯示模式</div>
+  <div class="mode-grid">
+    <div class="mode-btn active" data-mode="0" onclick="setMode(0)">
+      <span class="icon">🕐</span>時鐘
+    </div>
+    <div class="mode-btn" data-mode="1" onclick="setMode(1)">
+      <span class="icon">📜</span>跑馬燈
+    </div>
+    <div class="mode-btn" data-mode="2" onclick="setMode(2)">
+      <span class="icon">🎞️</span>GIF
+    </div>
+  </div>
+</div>
+
+<!-- 亮度 & 速度 -->
+<div class="card">
+  <div class="card-title">顯示設定</div>
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <div class="slider-row">
+      <label>亮度</label>
+      <input type="range" id="brightness" min="10" max="255" value="50"
+             oninput="document.getElementById('bVal').textContent=this.value"
+             onchange="sendCmd({cmd:'setBrightness',value:+this.value})">
+      <span class="slider-val" id="bVal">50</span>
+    </div>
+    <div class="slider-row">
+      <label>速度</label>
+      <input type="range" id="speed" min="10" max="200" value="40"
+             oninput="document.getElementById('sVal').textContent=this.value+'ms'"
+             onchange="sendCmd({cmd:'setSpeed',value:+this.value})">
+      <span class="slider-val" id="sVal">40ms</span>
+    </div>
+  </div>
+</div>
+
+<!-- 跑馬燈文字 -->
+<div class="card">
+  <div class="card-title">跑馬燈文字</div>
+  <div class="input-row">
+    <input type="text" id="scrollText" placeholder="輸入要顯示的文字..." value="Hello!">
+    <button class="btn" onclick="sendScrollText()">送出</button>
+  </div>
+</div>
+
+<!-- GIF 上傳（佔位，後續實作） -->
+<div class="card">
+  <div class="card-title">GIF 上傳</div>
+  <div style="text-align:center;padding:16px 0;color:var(--text2);font-size:13px;">
+    🚧 功能開發中，即將推出
+  </div>
+</div>
+
+<!-- 系統資訊 -->
+<div class="card">
+  <div class="card-title">系統資訊</div>
+  <div class="info-row">
+    <span class="key">IP 位址</span>
+    <span class="val" id="infoIP">--</span>
+  </div>
+  <div class="info-row">
+    <span class="key">NTP 同步</span>
+    <span class="val" id="infoNTP">--</span>
+  </div>
+  <div class="info-row">
+    <span class="key">連線模式</span>
+    <span class="val" id="infoMode">--</span>
+  </div>
+</div>
+
+<!-- Wi-Fi 設定 -->
+<div class="card">
+  <div class="card-title">Wi-Fi 設定</div>
+  <div class="wifi-form">
+    <input type="text" id="wifiSSID" placeholder="Wi-Fi 名稱（SSID）">
+    <input type="text" id="wifiPass" placeholder="Wi-Fi 密碼">
+    <button class="btn danger" onclick="saveWiFi()">儲存並重新啟動</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// WebSocket
+// ============================================================
+let ws;
+let wsReady = false;
+const WS_URL = `ws://${location.hostname}/ws`;
+
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    wsReady = true;
+    setDot(true);
+    showToast('已連線');
+  };
+
+  ws.onclose = () => {
+    wsReady = false;
+    setDot(false);
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    wsReady = false;
+    setDot(false);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      applyState(data);
+    } catch(_) {}
+  };
+}
+
+function setDot(on) {
+  document.getElementById('wsDot').className = 'status-dot' + (on ? ' on' : '');
+  document.getElementById('wsLabel').textContent = on ? '已連線' : '未連線';
+}
+
+function sendCmd(obj) {
+  if (wsReady) {
+    ws.send(JSON.stringify(obj));
+  } else {
+    showToast('尚未連線，請稍後');
+  }
+}
+
+// ============================================================
+// 套用狀態
+// ============================================================
+function applyState(d) {
+  if (d.mode !== undefined) setModeUI(d.mode);
+  if (d.brightness !== undefined) {
+    document.getElementById('brightness').value = d.brightness;
+    document.getElementById('bVal').textContent = d.brightness;
+  }
+  if (d.text !== undefined) {
+    document.getElementById('scrollText').value = d.text;
+  }
+  if (d.speed !== undefined) {
+    document.getElementById('speed').value = d.speed;
+    document.getElementById('sVal').textContent = d.speed + 'ms';
+  }
+  if (d.ip !== undefined) {
+    document.getElementById('infoIP').textContent = d.ip;
+  }
+  if (d.ntpSynced !== undefined) {
+    const el = document.getElementById('infoNTP');
+    el.textContent = d.ntpSynced ? '已同步' : '未同步';
+    el.className = 'val ' + (d.ntpSynced ? 'ok' : 'err');
+  }
+  if (d.apMode !== undefined) {
+    document.getElementById('infoMode').textContent = d.apMode ? 'AP 熱點模式' : 'STA 連線模式';
+  }
+}
+
+// ============================================================
+// 顯示模式
+// ============================================================
+function setMode(mode) {
+  sendCmd({ cmd: 'setMode', value: mode });
+  setModeUI(mode);
+}
+
+function setModeUI(mode) {
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', +btn.dataset.mode === mode);
+  });
+}
+
+// ============================================================
+// 跑馬燈
+// ============================================================
+function sendScrollText() {
+  const text = document.getElementById('scrollText').value.trim();
+  if (!text) return;
+  sendCmd({ cmd: 'setText', value: text });
+  setMode(1);
+  showToast('文字已送出');
+}
+
+// ============================================================
+// Wi-Fi 儲存
+// ============================================================
+function saveWiFi() {
+  const ssid = document.getElementById('wifiSSID').value.trim();
+  const pass = document.getElementById('wifiPass').value;
+  if (!ssid) { showToast('請輸入 SSID'); return; }
+  if (!confirm(`確定要連線到「${ssid}」並重新啟動嗎？`)) return;
+  sendCmd({ cmd: 'setWiFi', ssid, password: pass });
+  showToast('儲存中，裝置即將重新啟動...');
+}
+
+// ============================================================
+// 本機時鐘
+// ============================================================
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('clockTime').textContent =
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const days = ['日','一','二','三','四','五','六'];
+  document.getElementById('clockDate').textContent =
+    `${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} 週${days[now.getDay()]}`;
+}
+
+// ============================================================
+// 面板預覽（Canvas 模擬）
+// ============================================================
+const canvas = document.getElementById('preview');
+const ctx = canvas.getContext('2d');
+let previewScrollX = 64;
+let previewText = 'Hello!';
+let previewMode = 0;
+
+function drawPreview() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 64, 32);
+
+  if (previewMode === 0) {
+    // 時鐘預覽
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    ctx.fillStyle = '#00c8ff';
+    ctx.font = '6px monospace';
+    ctx.fillText(`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`, 2, 8);
+    ctx.fillStyle = '#888';
+    ctx.fillText(`${pad(now.getMonth()+1)}/${pad(now.getDate())}`, 2, 20);
+    // Wi-Fi 指示點
+    ctx.fillStyle = wsReady ? '#00e676' : '#ff4444';
+    ctx.fillRect(62, 1, 1, 1);
+
+  } else if (previewMode === 1) {
+    // 跑馬燈預覽
+    ctx.fillStyle = '#ff6420';
+    ctx.font = '6px monospace';
+    ctx.fillText(previewText, previewScrollX, 18);
+    previewScrollX--;
+    const w = previewText.length * 4;
+    if (previewScrollX < -w) previewScrollX = 64;
+
+  } else {
+    ctx.fillStyle = '#333';
+    ctx.font = '5px monospace';
+    ctx.fillText('GIF mode', 10, 18);
+  }
+}
+
+// ============================================================
+// Toast
+// ============================================================
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+connectWS();
+setInterval(updateClock, 1000);
+updateClock();
+setInterval(drawPreview, 100);
+drawPreview();
+
+// Enter 送出文字
+document.getElementById('scrollText').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendScrollText();
+});
+
+// 同步預覽模式
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    previewMode = +btn.dataset.mode;
+    previewScrollX = 64;
+  });
+});
+
+// 同步文字到預覽
+document.getElementById('scrollText').addEventListener('input', e => {
+  previewText = e.target.value || 'Hello!';
+  previewScrollX = 64;
+});
+</script>
+</body>
+</html>
