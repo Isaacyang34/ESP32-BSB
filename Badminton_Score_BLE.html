@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>羽球計分板 BLE 遙控器</title>
+  <style>
+    body { background: #121212; color: #eee; font-family: sans-serif; text-align: center; margin: 0; padding: 15px; }
+    .card { background: #2a2a2a; margin-bottom: 12px; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    button {
+      padding: 20px; margin: 5px; border-radius: 12px; border: none; cursor: pointer; font-weight: bold; transition: 0.1s;
+      touch-action: manipulation; -webkit-user-select: none; user-select: none;
+    }
+    button:active { transform: scale(0.92); }
+    .btn-sc { width: 45%; font-size: 2.5rem; color: white; }
+    .btn-sub { width: 45%; font-size: 1.5rem; color: #ccc; padding: 15px; margin-top: 5px; }
+    #connectBtn { width: 95%; background: #007bff; color: white; font-size: 1.5rem; border-radius: 15px; box-shadow: 0 0 15px rgba(0,123,255,0.4); margin-bottom: 10px; }
+    .btn-setup { width: 95%; background: #17a2b8; color: white; font-size: 1.2rem; margin-bottom: 20px; border-radius: 15px;}
+  </style>
+</head>
+<body>
+
+  <button id="connectBtn" onclick="connectBLE()">📡 點我尋找計分板並連線</button>
+  
+  <button class="btn-setup" onclick="enterSetupMode()">⚙️ 切換至 WiFi 設定模式</button>
+
+  <button id="btn-voice" style="width: 95%; background: #444; color: white; font-size: 1.5rem; border-radius: 15px; margin-bottom: 20px; border: 2px solid #666;" onclick="toggleVoiceRecognition()">🎤 點我啟動語音控制</button>
+
+  <div class="card">
+    <div style="font-size:1.2rem; color:#888; margin-bottom:15px;">計分控制區</div>
+    <div>
+      <button class="btn-sc" style="background:#dc3545;" onclick="sendCmd('A')">A +1</button>
+      <button class="btn-sc" style="background:#28a745;" onclick="sendCmd('B')">B +1</button>
+    </div>
+    <div>
+      <button class="btn-sub" style="background:#6c1922;" onclick="sendCmd('A-')">A -1</button>
+      <button class="btn-sub" style="background:#165c26;" onclick="sendCmd('B-')">B -1</button>
+    </div>
+    <button style="width:92%; background:#555; color:white; margin-top:25px; font-size:1.2rem;" onclick="sendCmd('R')">🔄 重設分數</button>
+  </div>
+
+  <script>
+    const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+    const CHARACTERISTIC_UUID_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+    let bleDevice; let bleServer; let rxCharacteristic;
+
+    async function connectBLE() {
+      try {
+        const btn = document.getElementById('connectBtn'); btn.innerText = '搜尋中...';
+        bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ name: 'Badminton_Score_BLE' }], optionalServices: [SERVICE_UUID] });
+        bleServer = await bleDevice.gatt.connect();
+        const service = await bleServer.getPrimaryService(SERVICE_UUID);
+        rxCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID_RX);
+        btn.innerText = '✅ 已成功連線'; btn.style.background = '#28a745'; btn.style.boxShadow = '0 0 15px rgba(40,167,69,0.5)';
+        bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+      } catch (error) {
+        console.error(error); document.getElementById('connectBtn').innerText = '❌ 連線失敗，請重試'; document.getElementById('connectBtn').style.background = '#dc3545';
+      }
+    }
+
+    function onDisconnected() {
+      const btn = document.getElementById('connectBtn');
+      btn.innerText = '⚠️ 已斷線，點我重新連線'; btn.style.background = '#ffc107'; btn.style.color = '#000'; rxCharacteristic = null;
+    }
+
+    async function sendCmd(cmd) {
+      if (!rxCharacteristic) { alert('請先點擊上方按鈕連線藍牙！'); return; }
+      try {
+        let encoder = new TextEncoder();
+        await rxCharacteristic.writeValue(encoder.encode(cmd));
+        if (navigator.vibrate) navigator.vibrate(50);
+      } catch (error) { console.error("發送失敗", error); }
+    }
+
+    // 🟢 呼叫切換設定模式的功能
+    function enterSetupMode() {
+      if (!rxCharacteristic) { alert('請先連線藍牙，才能發送切換指令！'); return; }
+      if(confirm("即將關閉藍牙計分模式，並重啟為 WiFi 設定基地台。確定嗎？")) {
+        sendCmd('SETUP');
+        alert("指令已發送！請稍候 3 秒，然後用手機連接名為「Badminton_Setup」的 WiFi，密碼 12345678。連上後開啟瀏覽器輸入 192.168.4.1");
+      }
+    }
+
+    // ==========================================
+    // 🎤 語音辨識模組 (藍牙版)
+    // ==========================================
+    let recognition;
+    let isRecognizing = false;
+
+    function initSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true; // 持續監聽
+        recognition.interimResults = false;
+        recognition.lang = 'zh-TW';
+
+        recognition.onstart = function() {
+          isRecognizing = true;
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#ff3333';
+          btn.style.borderColor = '#ff0000';
+          btn.innerText = '🔴 正在聽取語音指令...';
+        };
+
+        recognition.onresult = function(event) {
+          const transcript = event.results[event.results.length - 1][0].transcript.trim();
+          console.log('聽到指令: ' + transcript);
+          
+          if (!rxCharacteristic) {
+             console.log('請先連線藍牙');
+             return;
+          }
+
+          if (transcript.includes('A隊加分') || transcript.includes('紅隊加分') || transcript.includes('左邊加分')) {
+            sendCmd('A');
+          } else if (transcript.includes('B隊加分') || transcript.includes('綠隊加分') || transcript.includes('右邊加分')) {
+            sendCmd('B');
+          } else if (transcript.includes('A隊減分') || transcript.includes('左邊減分') || transcript.includes('紅隊減分')) {
+            sendCmd('A-');
+          } else if (transcript.includes('B隊減分') || transcript.includes('右邊減分') || transcript.includes('綠隊減分')) {
+            sendCmd('B-');
+          } else if (transcript.includes('分數歸零') || transcript.includes('重新開始')) {
+            sendCmd('R');
+          }
+        };
+
+        recognition.onerror = function(event) {
+          console.error('語音辨識錯誤:', event.error);
+        };
+
+        recognition.onend = function() {
+          isRecognizing = false;
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#444';
+          btn.style.borderColor = '#666';
+          btn.innerText = '🎤 點我啟動語音控制';
+        };
+      } else {
+        alert('您的瀏覽器不支援語音辨識！請使用手機版 Chrome 或 Safari。');
+      }
+    }
+
+    function toggleVoiceRecognition() {
+      if (!recognition) initSpeech();
+      if (isRecognizing) {
+        recognition.stop();
+      } else {
+        try { recognition.start(); } catch(e) { console.error(e); }
+      }
+    }
+  </script>
+</body>
+</html>
