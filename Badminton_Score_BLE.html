@@ -24,10 +24,8 @@
   
   <button class="btn-setup" onclick="enterSetupMode()">⚙️ 切換至 WiFi 設定模式</button>
 
-  <button id="btn-voice" style="width: 95%; background: #444; color: white; font-size: 1.5rem; border-radius: 15px; margin-bottom: 5px; border: 2px solid #666;" onclick="toggleVoiceRecognition()">🎤 點我啟動語音控制</button>
-  
-
-
+  <button id="btn-voice" style="width: 90%; background: #444; color: white; font-size: 1.5rem; border-radius: 15px; margin-bottom: 5px; border: 2px solid #666; display: block; margin: 0 auto 5px auto;" onclick="toggleVoiceRecognition()">🎤 點我啟動語音控制</button>
+  <div id="v-text" style="text-align: center; color: #ffc107; font-size: 1.1rem; margin-bottom: 15px; min-height: 25px;"></div>
   <div class="card">
     <div style="font-size:1.2rem; color:#888; margin-bottom:15px;">計分控制區</div>
     <div>
@@ -94,11 +92,13 @@
       if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = false; // 單次聆聽
-        recognition.interimResults = false; // 關閉即時回饋，只拿最終結果最穩定
+        recognition.interimResults = true; // 開啟即時回饋，用來在吵雜環境中提前攔截
         recognition.lang = 'zh-TW';
 
         recognition.onstart = function() {
           isRecognizing = true;
+          document.getElementById('v-text').innerText = '正在開啟麥克風...';
+          document.getElementById('v-text').style.color = '#aaa';
           const btn = document.getElementById('btn-voice');
           btn.style.background = '#ff8800'; // 橘色表示準備中
           btn.style.borderColor = '#cc6600';
@@ -106,24 +106,21 @@
         };
 
         recognition.onaudiostart = function() {
-          // 這是底層硬體真正開始擷取聲音的瞬間
           const btn = document.getElementById('btn-voice');
           btn.style.background = '#ff3333'; // 紅色表示收音中
           btn.style.borderColor = '#ff0000';
           btn.innerText = '🔴 麥克風已啟動，請說話...';
+          document.getElementById('v-text').innerText = '(請說出指令)';
         };
 
         recognition.onsoundstart = function() {
-          // 這是 Google 引擎判斷真的有收到音波能量的瞬間
-          const btn = document.getElementById('btn-voice');
-          btn.innerText = '🗣️ 有聽到聲音，辨識中...';
+          document.getElementById('v-text').innerText = '(有收到聲音，辨識中...)';
         };
 
         recognition.onerror = function(event) {
           console.error("語音錯誤: ", event.error);
-          if (event.error === 'not-allowed') {
-             alert('麥克風權限被阻擋，請在瀏覽器設定中允許。');
-          }
+          document.getElementById('v-text').innerText = '⚠️ 發生錯誤: ' + event.error;
+          document.getElementById('v-text').style.color = '#dc3545';
         };
 
         recognition.onend = function() {
@@ -135,27 +132,57 @@
         };
 
         recognition.onresult = function(event) {
-          const transcript = event.results[0][0].transcript.trim();
-          console.log('聽到指令: ' + transcript);
+          let interimTranscript = '';
+          let finalTranscript = '';
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
           
-          if (!rxCharacteristic) {
-             alert('⚠️ 藍牙未連線！指令無效');
-             return;
+          let transcriptToCheck = interimTranscript !== '' ? interimTranscript.trim() : finalTranscript.trim();
+          
+          if (transcriptToCheck !== '') {
+             document.getElementById('v-text').innerText = '聽到: ' + transcriptToCheck;
+             document.getElementById('v-text').style.color = '#0ff';
           }
 
-          if (transcript.includes('A隊加分') || transcript.includes('紅隊加分') || transcript.includes('左邊加分')) {
-            sendCmd('A');
-          } else if (transcript.includes('B隊加分') || transcript.includes('綠隊加分') || transcript.includes('右邊加分')) {
-            sendCmd('B');
-          } else if (transcript.includes('A隊減分') || transcript.includes('左邊減分') || transcript.includes('紅隊減分')) {
-            sendCmd('A-');
-          } else if (transcript.includes('B隊減分') || transcript.includes('右邊減分') || transcript.includes('綠隊減分')) {
-            sendCmd('B-');
-          } else if (transcript.includes('分數歸零') || transcript.includes('重新開始')) {
-            sendCmd('R');
-          } else {
-             // 沒命中指令的話，可以在 console 看聽到什麼
-             console.log('無效指令: ' + transcript);
+          if (transcriptToCheck !== '') {
+            let matched = false;
+            let cmd = '';
+            if (transcriptToCheck.includes('A隊加分') || transcriptToCheck.includes('紅隊加分') || transcriptToCheck.includes('左邊加分')) {
+              cmd = 'A'; matched = true;
+            } else if (transcriptToCheck.includes('B隊加分') || transcriptToCheck.includes('綠隊加分') || transcriptToCheck.includes('右邊加分')) {
+              cmd = 'B'; matched = true;
+            } else if (transcriptToCheck.includes('A隊減分') || transcriptToCheck.includes('左邊減分') || transcriptToCheck.includes('紅隊減分')) {
+              cmd = 'A-'; matched = true;
+            } else if (transcriptToCheck.includes('B隊減分') || transcriptToCheck.includes('右邊減分') || transcriptToCheck.includes('綠隊減分')) {
+              cmd = 'B-'; matched = true;
+            } else if (transcriptToCheck.includes('分數歸零') || transcriptToCheck.includes('重新開始')) {
+              cmd = 'R'; matched = true;
+            }
+
+            if (matched) {
+               if (!rxCharacteristic) {
+                  document.getElementById('v-text').innerText += ' ⚠️(藍牙未連線)';
+                  document.getElementById('v-text').style.color = '#dc3545';
+                  recognition.stop();
+                  return;
+               }
+               sendCmd(cmd);
+               document.getElementById('v-text').innerText += ' ✅(已發送)';
+               document.getElementById('v-text').style.color = '#28a745';
+               // 攔截到指令，立刻主動關閉麥克風，完成本次輸入
+               recognition.stop();
+            } else if (finalTranscript !== '') {
+               // 整句話結尾了還是沒命中
+               document.getElementById('v-text').innerText += ' ❌(無效指令)';
+               document.getElementById('v-text').style.color = '#dc3545';
+               recognition.stop();
+            }
           }
         };
 
