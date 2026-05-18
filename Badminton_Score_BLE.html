@@ -86,12 +86,13 @@
     // ==========================================
     let recognition;
     let isRecognizing = false;
+    let keepListening = false; // 新增：用來控制是否要一直自動重啟
 
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.continuous = false; // 單次聆聽
+        recognition.continuous = true; // 開啟持續聆聽 (盡可能讓瀏覽器保持)
         recognition.interimResults = true; // 開啟即時回饋，用來在吵雜環境中提前攔截
         recognition.lang = 'zh-TW';
 
@@ -121,14 +122,23 @@
           console.error("語音錯誤: ", event.error);
           document.getElementById('v-text').innerText = '⚠️ 發生錯誤: ' + event.error;
           document.getElementById('v-text').style.color = '#dc3545';
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+             keepListening = false; // 發生致命錯誤，強制停止無窮迴圈
+          }
         };
 
         recognition.onend = function() {
           isRecognizing = false;
-          const btn = document.getElementById('btn-voice');
-          btn.style.background = '#444';
-          btn.style.borderColor = '#666';
-          btn.innerText = '🎤 點我啟動語音控制';
+          if (keepListening) {
+             document.getElementById('v-text').innerText = '🔄 自動重啟收音中...';
+             document.getElementById('v-text').style.color = '#ffc107';
+             try { recognition.start(); } catch(e) { console.error("重啟失敗", e); }
+          } else {
+             const btn = document.getElementById('btn-voice');
+             btn.style.background = '#444';
+             btn.style.borderColor = '#666';
+             btn.innerText = '🎤 點我啟動語音控制';
+          }
         };
 
         recognition.onresult = function(event) {
@@ -196,13 +206,16 @@
       if (!recognition) initSpeech();
       if (!recognition) return;
 
-      if (isRecognizing) {
+      if (isRecognizing || keepListening) {
+        keepListening = false; // 關閉自動重啟
         recognition.stop();
         const btn = document.getElementById('btn-voice');
         btn.style.background = '#444';
         btn.style.borderColor = '#666';
         btn.innerText = '🎤 點我啟動語音控制';
+        document.getElementById('v-text').innerText = '⏹️ 語音已手動關閉';
       } else {
+        keepListening = true; // 開啟自動重啟
         try { recognition.start(); } catch(e) { console.error(e); }
       }
     }
