@@ -24,8 +24,10 @@
   
   <button class="btn-setup" onclick="enterSetupMode()">⚙️ 切換至 WiFi 設定模式</button>
 
-  <button id="btn-voice" style="width: 90%; background: #444; color: white; font-size: 1.5rem; border-radius: 15px; margin-bottom: 5px; border: 2px solid #666; display: block; margin: 0 auto 5px auto;" onclick="toggleVoiceRecognition()">🎤 點我啟動語音控制</button>
-  <div id="v-text" style="text-align: center; color: #ffc107; font-size: 1.1rem; margin-bottom: 15px; min-height: 25px;"></div>
+  <button id="btn-voice" style="width: 70%; padding: 12px; background: #444; color: white; font-size: 1.2rem; border-radius: 12px; border: 2px solid #666; display: block; margin: 0 auto 5px auto;" onclick="toggleVoiceRecognition()">🎤 啟動語音控制</button>
+  <div id="v-status" style="text-align: center; color: #aaa; font-size: 0.9rem; margin-bottom: 2px;">狀態: 等待中...</div>
+  <div id="v-text" style="text-align: center; color: #0ff; font-size: 1.2rem; margin-bottom: 5px; min-height: 28px; font-weight: bold;"></div>
+  <div id="v-log" style="text-align: center; color: #28a745; font-size: 1rem; margin-bottom: 15px; min-height: 25px;">上一筆: 無</div>
   <div class="card">
     <div style="font-size:1.2rem; color:#888; margin-bottom:15px;">計分控制區</div>
     <div>
@@ -98,46 +100,45 @@
 
         recognition.onstart = function() {
           isRecognizing = true;
-          document.getElementById('v-text').innerText = '正在開啟麥克風...';
-          document.getElementById('v-text').style.color = '#aaa';
+          document.getElementById('v-status').innerText = '⏳ 正在開啟麥克風...';
           const btn = document.getElementById('btn-voice');
-          btn.style.background = '#ff8800'; // 橘色表示準備中
+          btn.style.background = '#ff8800';
           btn.style.borderColor = '#cc6600';
-          btn.innerText = '⏳ 正在開啟麥克風硬體...';
+          btn.innerText = '⏳ 準備中...';
         };
 
         recognition.onaudiostart = function() {
           const btn = document.getElementById('btn-voice');
-          btn.style.background = '#ff3333'; // 紅色表示收音中
+          btn.style.background = '#ff3333';
           btn.style.borderColor = '#ff0000';
-          btn.innerText = '🔴 麥克風已啟動，請說話...';
-          document.getElementById('v-text').innerText = '(請說出指令)';
+          btn.innerText = '🔴 接收中...';
+          document.getElementById('v-status').innerText = '🗣️ 請說出指令';
         };
 
         recognition.onsoundstart = function() {
-          document.getElementById('v-text').innerText = '(有收到聲音，辨識中...)';
+          document.getElementById('v-status').innerText = '👂 辨識中...';
         };
 
         recognition.onerror = function(event) {
           console.error("語音錯誤: ", event.error);
-          document.getElementById('v-text').innerText = '⚠️ 發生錯誤: ' + event.error;
-          document.getElementById('v-text').style.color = '#dc3545';
+          document.getElementById('v-status').innerText = '⚠️ 錯誤: ' + event.error;
           if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-             keepListening = false; // 發生致命錯誤，強制停止無窮迴圈
+             keepListening = false;
           }
         };
 
         recognition.onend = function() {
           isRecognizing = false;
+          document.getElementById('v-text').innerText = ''; // 清除即時字幕
           if (keepListening) {
-             document.getElementById('v-text').innerText = '🔄 自動重啟收音中...';
-             document.getElementById('v-text').style.color = '#ffc107';
+             document.getElementById('v-status').innerText = '🔄 自動重啟中...';
              try { recognition.start(); } catch(e) { console.error("重啟失敗", e); }
           } else {
              const btn = document.getElementById('btn-voice');
              btn.style.background = '#444';
              btn.style.borderColor = '#666';
-             btn.innerText = '🎤 點我啟動語音控制';
+             btn.innerText = '🎤 啟動語音控制';
+             document.getElementById('v-status').innerText = '狀態: 已停止';
           }
         };
 
@@ -156,8 +157,7 @@
           let transcriptToCheck = interimTranscript !== '' ? interimTranscript.trim() : finalTranscript.trim();
           
           if (transcriptToCheck !== '') {
-             document.getElementById('v-text').innerText = '聽到: ' + transcriptToCheck;
-             document.getElementById('v-text').style.color = '#0ff';
+             document.getElementById('v-text').innerText = transcriptToCheck;
           }
 
           if (transcriptToCheck !== '') {
@@ -188,20 +188,19 @@
 
             if (matched) {
                if (!rxCharacteristic) {
-                  document.getElementById('v-text').innerText += ' ⚠️(藍牙未連線)';
-                  document.getElementById('v-text').style.color = '#dc3545';
+                  document.getElementById('v-log').innerText = '上一筆: ' + transcriptToCheck + ' ⚠️ 未連線';
+                  document.getElementById('v-log').style.color = '#dc3545';
                   recognition.stop();
                   return;
                }
                sendCmd(cmd);
-               document.getElementById('v-text').innerText += ' ✅(已發送)';
-               document.getElementById('v-text').style.color = '#28a745';
-               // 攔截到指令，立刻主動關閉麥克風，完成本次輸入
+               document.getElementById('v-log').innerText = '上一筆: ' + transcriptToCheck + ' ✅ 已發送';
+               document.getElementById('v-log').style.color = '#28a745';
                recognition.stop();
             } else if (finalTranscript !== '') {
                // 整句話結尾了還是沒命中
-               document.getElementById('v-text').innerText += ' ❌(無效指令)';
-               document.getElementById('v-text').style.color = '#dc3545';
+               document.getElementById('v-log').innerText = '上一筆: ' + transcriptToCheck + ' ❌ 無效指令';
+               document.getElementById('v-log').style.color = '#dc3545';
                recognition.stop();
             }
           }
@@ -223,8 +222,9 @@
         const btn = document.getElementById('btn-voice');
         btn.style.background = '#444';
         btn.style.borderColor = '#666';
-        btn.innerText = '🎤 點我啟動語音控制';
-        document.getElementById('v-text').innerText = '⏹️ 語音已手動關閉';
+        btn.innerText = '🎤 啟動語音控制';
+        document.getElementById('v-status').innerText = '狀態: 已手動關閉';
+        document.getElementById('v-text').innerText = '';
       } else {
         keepListening = true; // 開啟自動重啟
         try { recognition.start(); } catch(e) { console.error(e); }
