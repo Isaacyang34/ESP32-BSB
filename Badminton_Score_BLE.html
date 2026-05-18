@@ -163,15 +163,26 @@
           if (transcriptToCheck !== '') {
             let matched = false;
             let cmd = '';
-            if (transcriptToCheck.includes('A隊加分') || transcriptToCheck.includes('紅隊加分') || transcriptToCheck.includes('左邊加分')) {
+            
+            // 將整句轉為小寫，方便英文 A/B 比對
+            let t = transcriptToCheck.toLowerCase();
+
+            // 定義各種快語速、台灣國語、同音異字的容錯詞庫
+            const aPlusWords = ['a隊加分', 'a對加分', '欸隊加分', 'a加分', 'a加一', 'a加1', '紅隊加分', '左邊加分', '左加一', '黑隊加分', '飛隊加分'];
+            const bPlusWords = ['b隊加分', 'b對加分', '逼隊加分', 'b加分', 'b加一', 'b加1', '綠隊加分', '右邊加分', '右加一', '低隊加分', '第一隊加分'];
+            const aMinusWords = ['a隊減分', 'a對減分', 'a扣分', 'a減一', 'a減1', '紅隊減分', '左邊減分', '左扣一'];
+            const bMinusWords = ['b隊減分', 'b對減分', 'b扣分', 'b減一', 'b減1', '綠隊減分', '右邊減分', '右扣一'];
+            const resetWords = ['分數歸零', '重新開始', '重設分數', '比賽開始'];
+
+            if (aPlusWords.some(word => t.includes(word))) {
               cmd = 'A'; matched = true;
-            } else if (transcriptToCheck.includes('B隊加分') || transcriptToCheck.includes('綠隊加分') || transcriptToCheck.includes('右邊加分')) {
+            } else if (bPlusWords.some(word => t.includes(word))) {
               cmd = 'B'; matched = true;
-            } else if (transcriptToCheck.includes('A隊減分') || transcriptToCheck.includes('左邊減分') || transcriptToCheck.includes('紅隊減分')) {
+            } else if (aMinusWords.some(word => t.includes(word))) {
               cmd = 'A-'; matched = true;
-            } else if (transcriptToCheck.includes('B隊減分') || transcriptToCheck.includes('右邊減分') || transcriptToCheck.includes('綠隊減分')) {
+            } else if (bMinusWords.some(word => t.includes(word))) {
               cmd = 'B-'; matched = true;
-            } else if (transcriptToCheck.includes('分數歸零') || transcriptToCheck.includes('重新開始')) {
+            } else if (resetWords.some(word => t.includes(word))) {
               cmd = 'R'; matched = true;
             }
 
