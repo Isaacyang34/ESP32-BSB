@@ -86,6 +86,7 @@
     // ==========================================
     let recognition;
     let isRecognizing = false;
+    let keepListening = false;
 
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -105,20 +106,27 @@
 
         recognition.onerror = function(event) {
           console.error("語音錯誤: ", event.error);
-          alert('語音發生錯誤：' + event.error + '\n\n可能原因：\n1. "not-allowed" 代表麥克風權限被阻擋。\n2. "network" 代表手機目前沒有網路連接。\n3. "no-speech" 代表一段時間沒說話自動停止。');
-          isRecognizing = false;
-          const btn = document.getElementById('btn-voice');
-          btn.style.background = '#6c757d';
-          btn.style.borderColor = '#6c757d';
-          btn.innerText = '🎤 點我啟動語音控制';
+          if (event.error === 'no-speech') {
+            // Android 手機一陣子沒說話會自動停止並報 no-speech，這是正常的
+            return;
+          }
+          if (event.error === 'not-allowed') {
+             alert('語音發生錯誤：' + event.error + '\n\n可能原因：麥克風權限被阻擋。');
+             keepListening = false;
+          }
         };
 
         recognition.onend = function() {
           isRecognizing = false;
-          const btn = document.getElementById('btn-voice');
-          btn.style.background = '#6c757d';
-          btn.style.borderColor = '#6c757d';
-          btn.innerText = '🎤 點我啟動語音控制';
+          if (keepListening) {
+             // 如果使用者沒有手動按鈕關閉，就自動重新喚醒語音辨識
+             try { recognition.start(); } catch(e) { console.error(e); }
+          } else {
+             const btn = document.getElementById('btn-voice');
+             btn.style.background = '#444';
+             btn.style.borderColor = '#666';
+             btn.innerText = '🎤 點我啟動語音控制';
+          }
         };
 
         recognition.onresult = function(event) {
@@ -143,17 +151,6 @@
           }
         };
 
-        recognition.onerror = function(event) {
-          console.error('語音辨識錯誤:', event.error);
-        };
-
-        recognition.onend = function() {
-          isRecognizing = false;
-          const btn = document.getElementById('btn-voice');
-          btn.style.background = '#444';
-          btn.style.borderColor = '#666';
-          btn.innerText = '🎤 點我啟動語音控制';
-        };
       } else {
         alert('您的瀏覽器不支援語音辨識！請使用手機版 Chrome 或 Safari。');
       }
@@ -161,9 +158,17 @@
 
     function toggleVoiceRecognition() {
       if (!recognition) initSpeech();
-      if (isRecognizing) {
+      if (!recognition) return;
+
+      if (keepListening || isRecognizing) {
+        keepListening = false;
         recognition.stop();
+        const btn = document.getElementById('btn-voice');
+        btn.style.background = '#444';
+        btn.style.borderColor = '#666';
+        btn.innerText = '🎤 點我啟動語音控制';
       } else {
+        keepListening = true;
         try { recognition.start(); } catch(e) { console.error(e); }
       }
     }
