@@ -26,10 +26,7 @@
 
   <button id="btn-voice" style="width: 95%; background: #444; color: white; font-size: 1.5rem; border-radius: 15px; margin-bottom: 5px; border: 2px solid #666;" onclick="toggleVoiceRecognition()">🎤 點我啟動語音控制</button>
   
-  <div id="voice-status-box" style="width: 90%; background: #222; border: 1px solid #555; border-radius: 8px; margin: 0 auto 15px auto; padding: 10px; color: #aaa; font-size: 1.1rem; text-align: left; display: none;">
-    <div style="margin-bottom: 5px;"><strong>狀態:</strong> <span id="v-state" style="color: #ffc107;">未啟動</span></div>
-    <div><strong>聽到:</strong> <span id="v-text" style="color: #0ff;">(等待語音中...)</span></div>
-  </div>
+
 
   <div class="card">
     <div style="font-size:1.2rem; color:#888; margin-bottom:15px;">計分控制區</div>
@@ -79,15 +76,8 @@
 
     // 🟢 呼叫切換設定模式的功能
     function enterSetupMode() {
-      if (!rxCharacteristic) { alert('請先連線藍牙，才能發送切換指令！'); return; }
-      if(confirm("即將關閉藍牙計分模式，並重啟為 WiFi 設定基地台。確定嗎？")) {
-        sendCmd('SETUP');
-        alert("指令已發送！請稍候 3 秒，然後用手機連接名為「Badminton_Setup」的 WiFi，密碼 12345678。連上後開啟瀏覽器輸入 192.168.4.1");
-      }
-    }
-
-    // ==========================================
-    // 🎤 語音辨識模組 (藍牙版)
+      if (!rxCharacteris    // ==========================================
+    // 🎤 語音辨識模組 (藍牙版 - 最初極簡穩定版)
     // ==========================================
     let recognition;
     let isRecognizing = false;
@@ -96,15 +86,11 @@
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.continuous = true; // 持續監聽
-        recognition.interimResults = true; // 開啟即時回饋
+        recognition.continuous = false; // 單次聆聽
+        recognition.interimResults = false; // 關閉即時回饋，只拿最終結果最穩定
         recognition.lang = 'zh-TW';
 
         recognition.onstart = function() {
-          document.getElementById('voice-status-box').style.display = 'block';
-          document.getElementById('v-state').innerText = '🟢 聆聽中... (隨時可說話)';
-          document.getElementById('v-state').style.color = '#28a745';
-          document.getElementById('v-text').innerText = '(等待語音中...)';
           isRecognizing = true;
           const btn = document.getElementById('btn-voice');
           btn.style.background = '#ff3333';
@@ -112,24 +98,10 @@
           btn.innerText = '🔴 正在聽取語音指令...';
         };
 
-        recognition.onsoundstart = function() {
-          document.getElementById('v-state').innerText = '🗣️ 偵測到聲音...';
-          document.getElementById('v-state').style.color = '#17a2b8';
-        };
-
-        recognition.onsoundend = function() {
-          if (isRecognizing) {
-             document.getElementById('v-state').innerText = '🟢 聆聽中... (隨時可說話)';
-             document.getElementById('v-state').style.color = '#28a745';
-          }
-        };
-
         recognition.onerror = function(event) {
           console.error("語音錯誤: ", event.error);
-          document.getElementById('v-state').innerText = '⚠️ 發生錯誤: ' + event.error;
-          document.getElementById('v-state').style.color = '#dc3545';
           if (event.error === 'not-allowed') {
-             alert('語音發生錯誤：' + event.error + '\n\n可能原因：麥克風權限被阻擋。');
+             alert('麥克風權限被阻擋，請在瀏覽器設定中允許。');
           }
         };
 
@@ -139,69 +111,30 @@
           btn.style.background = '#444';
           btn.style.borderColor = '#666';
           btn.innerText = '🎤 點我啟動語音控制';
-          document.getElementById('v-state').innerText = '❌ 已自動停止 (請重新點按按鈕)';
-          document.getElementById('v-state').style.color = '#dc3545';
         };
 
         recognition.onresult = function(event) {
-          let interimTranscript = '';
-          let finalTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
+          const transcript = event.results[0][0].transcript.trim();
+          console.log('聽到指令: ' + transcript);
           
-          let transcriptToCheck = '';
-
-          if (interimTranscript !== '') {
-            document.getElementById('v-text').innerText = interimTranscript;
-            document.getElementById('v-text').style.color = '#aaa'; // 灰色表示還在想
-            transcriptToCheck = interimTranscript.trim();
-          }
-          
-          if (finalTranscript !== '') {
-            document.getElementById('v-text').innerText = finalTranscript.trim();
-            document.getElementById('v-text').style.color = '#0ff'; // 亮青色表示最終結果
-            transcriptToCheck = finalTranscript.trim();
-            console.log('最終指令: ' + transcriptToCheck);
+          if (!rxCharacteristic) {
+             alert('⚠️ 藍牙未連線！指令無效');
+             return;
           }
 
-          if (transcriptToCheck !== '') {
-            if (!rxCharacteristic) {
-               document.getElementById('v-state').innerText = '⚠️ 藍牙未連線！指令無效';
-               document.getElementById('v-state').style.color = '#dc3545';
-               return;
-            }
-
-            let matched = false;
-            if (transcriptToCheck.includes('A隊加分') || transcriptToCheck.includes('紅隊加分') || transcriptToCheck.includes('左邊加分')) {
-              sendCmd('A'); matched = true;
-            } else if (transcriptToCheck.includes('B隊加分') || transcriptToCheck.includes('綠隊加分') || transcriptToCheck.includes('右邊加分')) {
-              sendCmd('B'); matched = true;
-            } else if (transcriptToCheck.includes('A隊減分') || transcriptToCheck.includes('左邊減分') || transcriptToCheck.includes('紅隊減分')) {
-              sendCmd('A-'); matched = true;
-            } else if (transcriptToCheck.includes('B隊減分') || transcriptToCheck.includes('右邊減分') || transcriptToCheck.includes('綠隊減分')) {
-              sendCmd('B-'); matched = true;
-            } else if (transcriptToCheck.includes('分數歸零') || transcriptToCheck.includes('重新開始')) {
-              sendCmd('R'); matched = true;
-            }
-
-            if (matched) {
-               document.getElementById('v-state').innerText = '✅ 發送成功: ' + transcriptToCheck;
-               document.getElementById('v-state').style.color = '#28a745';
-               
-               // 命中指令後立刻停止，完成一次完整的「按鍵->講話->送出」循環
-               recognition.stop();
-            } else if (finalTranscript !== '') {
-               // 一句話結尾但沒命中，也立刻停止，避免一直聽
-               document.getElementById('v-state').innerText = '❌ 無效指令: ' + transcriptToCheck;
-               document.getElementById('v-state').style.color = '#dc3545';
-               recognition.stop();
-            }
+          if (transcript.includes('A隊加分') || transcript.includes('紅隊加分') || transcript.includes('左邊加分')) {
+            sendCmd('A');
+          } else if (transcript.includes('B隊加分') || transcript.includes('綠隊加分') || transcript.includes('右邊加分')) {
+            sendCmd('B');
+          } else if (transcript.includes('A隊減分') || transcript.includes('左邊減分') || transcript.includes('紅隊減分')) {
+            sendCmd('A-');
+          } else if (transcript.includes('B隊減分') || transcript.includes('右邊減分') || transcript.includes('綠隊減分')) {
+            sendCmd('B-');
+          } else if (transcript.includes('分數歸零') || transcript.includes('重新開始')) {
+            sendCmd('R');
+          } else {
+             // 沒命中指令的話，可以在 console 看聽到什麼
+             console.log('無效指令: ' + transcript);
           }
         };
 
@@ -209,6 +142,7 @@
         alert('您的瀏覽器不支援語音辨識！請使用手機版 Chrome 或 Safari。');
       }
     }
+
 
     function toggleVoiceRecognition() {
       if (!recognition) initSpeech();
