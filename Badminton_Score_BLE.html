@@ -91,7 +91,6 @@
     // ==========================================
     let recognition;
     let isRecognizing = false;
-    let keepListening = false;
 
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -127,33 +126,21 @@
 
         recognition.onerror = function(event) {
           console.error("語音錯誤: ", event.error);
-          if (event.error === 'no-speech') {
-            // Android 手機一陣子沒說話會自動停止並報 no-speech，這是正常的
-            return;
-          }
           document.getElementById('v-state').innerText = '⚠️ 發生錯誤: ' + event.error;
           document.getElementById('v-state').style.color = '#dc3545';
           if (event.error === 'not-allowed') {
              alert('語音發生錯誤：' + event.error + '\n\n可能原因：麥克風權限被阻擋。');
-             keepListening = false;
           }
         };
 
         recognition.onend = function() {
           isRecognizing = false;
-          if (keepListening) {
-             // 如果使用者沒有手動按鈕關閉，就自動重新喚醒語音辨識
-             document.getElementById('v-state').innerText = '🔄 系統自動重啟收音...';
-             document.getElementById('v-state').style.color = '#ffc107';
-             try { recognition.start(); } catch(e) { console.error(e); }
-          } else {
-             const btn = document.getElementById('btn-voice');
-             btn.style.background = '#444';
-             btn.style.borderColor = '#666';
-             btn.innerText = '🎤 點我啟動語音控制';
-             document.getElementById('v-state').innerText = '❌ 已手動停止';
-             document.getElementById('v-state').style.color = '#dc3545';
-          }
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#444';
+          btn.style.borderColor = '#666';
+          btn.innerText = '🎤 點我啟動語音控制';
+          document.getElementById('v-state').innerText = '❌ 已自動停止 (請重新點按按鈕)';
+          document.getElementById('v-state').style.color = '#dc3545';
         };
 
         recognition.onresult = function(event) {
@@ -204,23 +191,16 @@
             }
 
             if (matched) {
-               document.getElementById('v-state').innerText = '✅ 攔截發送: ' + transcriptToCheck;
+               document.getElementById('v-state').innerText = '✅ 發送成功: ' + transcriptToCheck;
                document.getElementById('v-state').style.color = '#28a745';
                
-               // 神級解法：只要命中指令，立刻強迫停止當下收音 (切斷背景噪音造成的無限迴圈)
-               // 因為有 keepListening 機制，它會在 0.1 秒後帶著乾淨的緩衝區重新復活！
+               // 命中指令後立刻停止，完成一次完整的「按鍵->講話->送出」循環
                recognition.stop();
             } else if (finalTranscript !== '') {
-               // 如果是一句話的結尾但沒命中
-               document.getElementById('v-state').innerText = '❌ 無效指令 (不包含關鍵字)';
+               // 一句話結尾但沒命中，也立刻停止，避免一直聽
+               document.getElementById('v-state').innerText = '❌ 無效指令: ' + transcriptToCheck;
                document.getElementById('v-state').style.color = '#dc3545';
-               
-               setTimeout(() => {
-                 if (isRecognizing && document.getElementById('v-state').innerText.includes('無效')) {
-                   document.getElementById('v-state').innerText = '🟢 聆聽中... (隨時可說話)';
-                   document.getElementById('v-state').style.color = '#28a745';
-                 }
-               }, 3000);
+               recognition.stop();
             }
           }
         };
@@ -234,15 +214,13 @@
       if (!recognition) initSpeech();
       if (!recognition) return;
 
-      if (keepListening || isRecognizing) {
-        keepListening = false;
+      if (isRecognizing) {
         recognition.stop();
         const btn = document.getElementById('btn-voice');
         btn.style.background = '#444';
         btn.style.borderColor = '#666';
         btn.innerText = '🎤 點我啟動語音控制';
       } else {
-        keepListening = true;
         try { recognition.start(); } catch(e) { console.error(e); }
       }
     }
