@@ -223,17 +223,22 @@
             }
           }
           
+          let transcriptToCheck = '';
+
           if (interimTranscript !== '') {
             document.getElementById('v-text').innerText = interimTranscript;
             document.getElementById('v-text').style.color = '#aaa'; // 灰色表示還在想
+            transcriptToCheck = interimTranscript.trim();
           }
           
           if (finalTranscript !== '') {
-            let transcript = finalTranscript.trim();
-            document.getElementById('v-text').innerText = transcript;
+            document.getElementById('v-text').innerText = finalTranscript.trim();
             document.getElementById('v-text').style.color = '#0ff'; // 亮青色表示最終結果
-            console.log('最終指令: ' + transcript);
-            
+            transcriptToCheck = finalTranscript.trim();
+            console.log('最終指令: ' + transcriptToCheck);
+          }
+
+          if (transcriptToCheck !== '') {
             if (!rxCharacteristic) {
                document.getElementById('v-state').innerText = '⚠️ 藍牙未連線！指令無效';
                document.getElementById('v-state').style.color = '#dc3545';
@@ -241,33 +246,37 @@
             }
 
             let matched = false;
-            if (transcript.includes('A隊加分') || transcript.includes('紅隊加分') || transcript.includes('左邊加分')) {
+            if (transcriptToCheck.includes('A隊加分') || transcriptToCheck.includes('紅隊加分') || transcriptToCheck.includes('左邊加分')) {
               sendCmd('A'); matched = true;
-            } else if (transcript.includes('B隊加分') || transcript.includes('綠隊加分') || transcript.includes('右邊加分')) {
+            } else if (transcriptToCheck.includes('B隊加分') || transcriptToCheck.includes('綠隊加分') || transcriptToCheck.includes('右邊加分')) {
               sendCmd('B'); matched = true;
-            } else if (transcript.includes('A隊減分') || transcript.includes('左邊減分') || transcript.includes('紅隊減分')) {
+            } else if (transcriptToCheck.includes('A隊減分') || transcriptToCheck.includes('左邊減分') || transcriptToCheck.includes('紅隊減分')) {
               sendCmd('A-'); matched = true;
-            } else if (transcript.includes('B隊減分') || transcript.includes('右邊減分') || transcript.includes('綠隊減分')) {
+            } else if (transcriptToCheck.includes('B隊減分') || transcriptToCheck.includes('右邊減分') || transcriptToCheck.includes('綠隊減分')) {
               sendCmd('B-'); matched = true;
-            } else if (transcript.includes('分數歸零') || transcript.includes('重新開始')) {
+            } else if (transcriptToCheck.includes('分數歸零') || transcriptToCheck.includes('重新開始')) {
               sendCmd('R'); matched = true;
             }
 
             if (matched) {
-               document.getElementById('v-state').innerText = '✅ 發送成功: ' + transcript;
+               document.getElementById('v-state').innerText = '✅ 攔截發送: ' + transcriptToCheck;
                document.getElementById('v-state').style.color = '#28a745';
-            } else {
+               
+               // 神級解法：只要命中指令，立刻強迫停止當下收音 (切斷背景噪音造成的無限迴圈)
+               // 因為有 keepListening 機制，它會在 0.1 秒後帶著乾淨的緩衝區重新復活！
+               recognition.stop();
+            } else if (finalTranscript !== '') {
+               // 如果是一句話的結尾但沒命中
                document.getElementById('v-state').innerText = '❌ 無效指令 (不包含關鍵字)';
                document.getElementById('v-state').style.color = '#dc3545';
+               
+               setTimeout(() => {
+                 if (isRecognizing && document.getElementById('v-state').innerText.includes('無效')) {
+                   document.getElementById('v-state').innerText = '🟢 聆聽中... (隨時可說話)';
+                   document.getElementById('v-state').style.color = '#28a745';
+                 }
+               }, 3000);
             }
-
-            // 3 秒後恢復狀態字樣
-            setTimeout(() => {
-               if (isRecognizing && (document.getElementById('v-state').innerText.includes('發送') || document.getElementById('v-state').innerText.includes('無效'))) {
-                 document.getElementById('v-state').innerText = '🟢 聆聽中... (隨時可說話)';
-                 document.getElementById('v-state').style.color = '#28a745';
-               }
-            }, 3000);
           }
         };
 
