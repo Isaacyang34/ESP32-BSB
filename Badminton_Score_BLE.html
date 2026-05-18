@@ -103,6 +103,24 @@
           btn.innerText = '🔴 正在聽取語音指令...';
         };
 
+        recognition.onerror = function(event) {
+          console.error("語音錯誤: ", event.error);
+          alert('語音發生錯誤：' + event.error + '\n\n可能原因：\n1. "not-allowed" 代表麥克風權限被阻擋。\n2. "network" 代表手機目前沒有網路連接。\n3. "no-speech" 代表一段時間沒說話自動停止。');
+          isRecognizing = false;
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#6c757d';
+          btn.style.borderColor = '#6c757d';
+          btn.innerText = '🎤 點我啟動語音控制';
+        };
+
+        recognition.onend = function() {
+          isRecognizing = false;
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#6c757d';
+          btn.style.borderColor = '#6c757d';
+          btn.innerText = '🎤 點我啟動語音控制';
+        };
+
         recognition.onresult = function(event) {
           const transcript = event.results[event.results.length - 1][0].transcript.trim();
           console.log('聽到指令: ' + transcript);
