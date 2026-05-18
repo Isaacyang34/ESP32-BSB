@@ -28,12 +28,6 @@
   
   <div id="voice-status-box" style="width: 90%; background: #222; border: 1px solid #555; border-radius: 8px; margin: 0 auto 15px auto; padding: 10px; color: #aaa; font-size: 1.1rem; text-align: left; display: none;">
     <div style="margin-bottom: 5px;"><strong>狀態:</strong> <span id="v-state" style="color: #ffc107;">未啟動</span></div>
-    <div style="margin-bottom: 5px; display:flex; align-items:center;">
-       <strong>音量:</strong> 
-       <div style="flex-grow:1; margin-left:10px; background:#444; height:10px; border-radius:5px; overflow:hidden;">
-          <div id="vol-bar" style="width:0%; background:#6c757d; height:100%; transition:width 0.1s linear;"></div>
-       </div>
-    </div>
     <div><strong>聽到:</strong> <span id="v-text" style="color: #0ff;">(等待語音中...)</span></div>
   </div>
 
@@ -98,70 +92,6 @@
     let recognition;
     let isRecognizing = false;
     let keepListening = false;
-    
-    // 音量計變數
-    let audioContext;
-    let analyser;
-    let microphone;
-    let volStream;
-    let volAnimId;
-
-    async function startVolumeMeter() {
-      try {
-        volStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        microphone = audioContext.createMediaStreamSource(volStream);
-        
-        analyser.smoothingTimeConstant = 0.7;
-        analyser.fftSize = 256;
-        microphone.connect(analyser);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        
-        function drawMeter() {
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for(let i=0; i<dataArray.length; i++) { sum += dataArray[i]; }
-          let average = sum / dataArray.length;
-          
-          let volBar = document.getElementById('vol-bar');
-          if (volBar) {
-            let width = Math.min(100, average * 1.5);
-            volBar.style.width = width + '%';
-            if (average > 15) volBar.style.background = '#28a745';
-            else volBar.style.background = '#6c757d';
-          }
-          volAnimId = requestAnimationFrame(drawMeter);
-        }
-        drawMeter();
-      } catch(err) {
-        console.error("無法啟動音量計", err);
-        let volBar = document.getElementById('vol-bar');
-        if (volBar) {
-           volBar.style.width = '100%';
-           volBar.style.background = '#dc3545';
-           volBar.innerHTML = '<span style="color:white; font-size:0.8rem; padding-left:5px; line-height:10px;">⚠️ 授權失敗/被佔用 ('+err.name+')</span>';
-        }
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-           alert("【麥克風授權失敗】\n您的瀏覽器拒絕了麥克風權限。\n請點擊網址列左側的 🔒 圖示，將麥克風設為「允許」。");
-        } else if (err.name === 'NotReadableError') {
-           alert("【麥克風被佔用】\n您的麥克風正被另一個 APP 或是藍牙耳機獨佔使用中，導致無法讀取音量。");
-        }
-      }
-    }
-
-    function stopVolumeMeter() {
-      if (volAnimId) cancelAnimationFrame(volAnimId);
-      if (volStream) { volStream.getTracks().forEach(t => t.stop()); }
-      if (audioContext) { audioContext.close(); audioContext = null; }
-      let volBar = document.getElementById('vol-bar');
-      if (volBar) { 
-         volBar.style.width = '0%'; 
-         volBar.style.background = '#6c757d'; 
-         volBar.innerHTML = '';
-      }
-    }
 
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -307,14 +237,12 @@
       if (keepListening || isRecognizing) {
         keepListening = false;
         recognition.stop();
-        stopVolumeMeter();
         const btn = document.getElementById('btn-voice');
         btn.style.background = '#444';
         btn.style.borderColor = '#666';
         btn.innerText = '🎤 點我啟動語音控制';
       } else {
         keepListening = true;
-        startVolumeMeter();
         try { recognition.start(); } catch(e) { console.error(e); }
       }
     }
