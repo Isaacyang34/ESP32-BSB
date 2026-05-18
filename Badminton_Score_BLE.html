@@ -100,9 +100,23 @@
         recognition.onstart = function() {
           isRecognizing = true;
           const btn = document.getElementById('btn-voice');
-          btn.style.background = '#ff3333';
+          btn.style.background = '#ff8800'; // 橘色表示準備中
+          btn.style.borderColor = '#cc6600';
+          btn.innerText = '⏳ 正在開啟麥克風硬體...';
+        };
+
+        recognition.onaudiostart = function() {
+          // 這是底層硬體真正開始擷取聲音的瞬間
+          const btn = document.getElementById('btn-voice');
+          btn.style.background = '#ff3333'; // 紅色表示收音中
           btn.style.borderColor = '#ff0000';
-          btn.innerText = '🔴 正在聽取語音指令...';
+          btn.innerText = '🔴 麥克風已啟動，請說話...';
+        };
+
+        recognition.onsoundstart = function() {
+          // 這是 Google 引擎判斷真的有收到音波能量的瞬間
+          const btn = document.getElementById('btn-voice');
+          btn.innerText = '🗣️ 有聽到聲音，辨識中...';
         };
 
         recognition.onerror = function(event) {
