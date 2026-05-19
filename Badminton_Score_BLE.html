@@ -38,6 +38,10 @@
       <button class="btn-sub" style="background:#6c1922;" onclick="sendCmd('A-')">A -1</button>
       <button class="btn-sub" style="background:#165c26;" onclick="sendCmd('B-')">B -1</button>
     </div>
+    <div style="margin-top:20px;">
+      <button class="btn-sub" style="background:#d39e00; color:#000;" onclick="sendCmd('SMASH')">💥 殺球特效</button>
+      <button class="btn-sub" style="background:#17a2b8; color:#fff;" onclick="sendCmd('OUT')">❌ 界外鷹眼</button>
+    </div>
     <button style="width:92%; background:#555; color:white; margin-top:25px; font-size:1.2rem;" onclick="sendCmd('R')">🔄 重設分數</button>
   </div>
 
@@ -173,6 +177,8 @@
             const aMinusWords = ['a隊減分', 'a對減分', 'a扣分', 'a減一', 'a減1', '紅隊減分', '左邊減分', '左扣一'];
             const bMinusWords = ['b隊減分', 'b對減分', 'b扣分', 'b減一', 'b減1', '綠隊減分', '右邊減分', '右扣一'];
             const resetWords = ['分數歸零', '重新開始', '重設分數', '比賽開始'];
+            const outWords = ['out', '奧', '澳喔', 'out site', '奧賽', '凹賽', '界外'];
+            const smashWords = ['殺球', '殺', 'smash'];
 
             if (aPlusWords.some(word => t.includes(word))) {
               cmd = 'A'; matched = true;
@@ -184,6 +190,10 @@
               cmd = 'B-'; matched = true;
             } else if (resetWords.some(word => t.includes(word))) {
               cmd = 'R'; matched = true;
+            } else if (outWords.some(word => t.includes(word))) {
+              cmd = 'OUT'; matched = true;
+            } else if (smashWords.some(word => t.includes(word))) {
+              cmd = 'SMASH'; matched = true;
             }
 
             if (matched) {
